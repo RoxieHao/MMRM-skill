@@ -1,0 +1,17 @@
+# Local source packages and generated analysis artifacts
+.codex/study-mmrm-analysis/tests/**/*.sas7bdat
+.codex/study-mmrm-analysis/tests/**/*.xpt
+.codex/study-mmrm-analysis/tests/**/*.pdf
+.codex/study-mmrm-analysis/tests/**/*.docx
+.codex/study-mmrm-analysis/tests/**/*.xlsx
+.codex/study-mmrm-analysis/tests/**/model-run/**/output/
+.codex/study-mmrm-analysis/tests/**/review/*.csv
+tmp_sap_extract/
+
+# R session artifacts
+.Rhistory
+.RData
+.Rproj.user/
+
+# Common generated model objects
+*.rds
