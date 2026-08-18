@@ -340,6 +340,11 @@ validate_standard_mmrm_contract <- function(contract) {
   invisible(TRUE)
 }
 
+standard_contract_fail_fast <- function(contract) {
+  validate_standard_mmrm_contract(contract)
+  if (is.null(contract$execution)) FALSE else isTRUE(contract$execution$fail_fast)
+}
+
 standard_resolve_fail_fast <- function(contract, cli_value = NULL) {
   if (!is.null(cli_value) && (!is.logical(cli_value) || length(cli_value) != 1L || is.na(cli_value))) stop("CLI fail_fast 必须是 true/false 或 NULL。")
   if (isTRUE(cli_value)) stop("Standard MMRM collector 不允许 fail_fast=true；必须尝试全部 approved TFL。")

@@ -15,8 +15,6 @@ value_arg <- function(name, required = TRUE) {
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
 script_file <- normalizePath(sub("^--file=", "", script_arg), winslash = "/", mustWork = TRUE)
 skill_dir <- normalizePath(file.path(dirname(script_file), ".."), winslash = "/", mustWork = TRUE)
-source(file.path(skill_dir, "R", "dependencies.R"), encoding = "UTF-8")
-ensure_skill_packages()
 source(file.path(skill_dir, "R", "specification.R"), encoding = "UTF-8")
 
 spec_path <- value_arg("spec")

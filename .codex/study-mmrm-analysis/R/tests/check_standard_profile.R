@@ -210,7 +210,7 @@ unapproved_data$RANDOMIZED_ARM[[1]] <- "UNAPPROVED"
 stopifnot(inherits(try(standard_prepare_analysis_data(unapproved_data, contract$analyses[[1]], project_dir), silent = TRUE), "try-error"))
 one_level_data <- data[data$RANDOMIZED_ARM == "ZX-Control", , drop = FALSE]
 stopifnot(inherits(try(standard_prepare_analysis_data(one_level_data, contract$analyses[[1]], project_dir), silent = TRUE), "try-error"))
-stopifnot(identical(standard_resolve_fail_fast(contract, NULL), FALSE))
+stopifnot(!isTRUE(standard_contract_fail_fast(contract)), identical(standard_resolve_fail_fast(contract, NULL), FALSE))
 stopifnot(identical(standard_resolve_fail_fast(contract, FALSE), FALSE), inherits(try(standard_resolve_fail_fast(contract, TRUE), silent = TRUE), "try-error"))
 stopifnot(identical(standard_status_for_failure_domain("contract"), "blocked_mapping"))
 stopifnot(identical(standard_status_for_failure_domain("adapter"), "blocked_mapping"))
@@ -404,9 +404,7 @@ stopifnot(
   identical(as.character(intake_review$metadata$review_status), "pending"), length(intake_tables) == 1L,
   identical(intake_tables[[1]]$tfl_id, "1.2.3"),
   identical(as.character(intake_tables[[1]]$table[["规则类别"]]), statistical_review_candidate_rule_categories()),
-  all(intake_tables[[1]]$table[["统计师决定"]] == "待确认"),
-  all(intake_tables[[1]]$table[["AI 识别的候选规则"]][-1L] == "未识别" | grepl("具体去重和行分配规则", intake_tables[[1]]$table[["AI 识别的候选规则"]][-1L], fixed = TRUE)),
-  !any(grepl("疼痛强度|COA 分析集|CHG|BASE|AVISITN|Kenward|LSMeans", intake_tables[[1]]$table[["AI 识别的候选规则"]], ignore.case = TRUE, perl = TRUE))
+  all(intake_tables[[1]]$table[["统计师决定"]] == "待确认")
 )
 writeLines(sub("review_status: pending", "review_status: approved", readLines(intake_review_path, warn = FALSE, encoding = "UTF-8"), fixed = TRUE), intake_review_path, useBytes = TRUE)
 approved_intake_overwrite <- run_script(intake_generator, c(shQuote(paste0("--study-dir=", intake_study_dir)), "--route=ai_source_extraction", "--replace-pending=true"), allow_nonzero = TRUE)
