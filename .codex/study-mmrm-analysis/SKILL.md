@@ -27,10 +27,10 @@ R/SAS code generation 不得从 SAP、shell、ADaM specification、legacy review
 
 skill 在入口处集中检查并按需安装全部运行期 R package。声明与检查逻辑在 `R/dependencies.R` 的 `skill_runtime_packages()` 与 `ensure_skill_packages()`：
 
-`digest`、`yaml`、`haven`、`mmrm`、`emmeans`、`callr`、`ggplot2`、`pdftools`（文本型 PDF 抽取）、`officer`（DOCX 抽取，依赖 `xml2`）、`readxl`（XLSX 抽取）。
+`digest`、`yaml`、`haven`、`mmrm`、`emmeans`、`callr`、`pdftools`（文本型 PDF 抽取）、`officer`（DOCX 抽取，依赖 `xml2`）、`readxl`（XLSX 抽取）。
 
 - `scripts/init_study.ps1` 在建目录前先运行 `scripts/check_dependencies.R`（若本机 `Rscript` 可用），缺失包会自动安装。
-- `scripts/generate_intake_review.R` 与 `scripts/generate_standard_study.R` 在开始工作前调用 `ensure_skill_packages()`，作为二次保障。
+- `scripts/generate_intake_review.R`、`scripts/generate_standard_study.R`、`scripts/generate_analysis_specification.R`、`scripts/approve_analysis_specification.R` 与 `scripts/validate_analysis_specification.R` 在开始工作前调用 `ensure_skill_packages()`，作为二次保障。
 - 离线环境可设置环境变量 `MMRM_SKILL_NO_INSTALL=1` 关闭自动安装；此时缺包会明确报错而非静默跳过。
 - 自检/测试额外需要 `writexl`、`testthat`（见 `skill_test_packages()`），不参与运行期强制安装。
 
@@ -212,7 +212,7 @@ Pattern 默认 `candidate/not_promoted`。Evidence 使用 closed aggregate field
 
 ## Endpoint Mapping：study-local 结构化来源
 
-机器可执行的 Section 4 endpoint mapping 存放在 study-local `statistician-review/endpoint-mapping.yaml`（`mapping_schema_version: '1.0'`）。intake 生成时会写出待填写模板；统计师在该 YAML 中确认每个 analysis/group 的显式业务字段。共享 Skill 只校验 schema、标识唯一性、Section 3/4 TFL 双向覆盖、runtime dataset binding、contract parity 和 SHA，不再根据 TFL 编号、标题、量表或 PARAMCD 推断规则。`scripts/derive_endpoint_mapping.R` 仅按 YAML 渲染 review 第 4 节，供诊断/展示；不是 finalization 完成标志，也不填写任何签核字段。
+机器可执行的 Section 4 endpoint mapping 存放在 study-local `statistician-review/endpoint-mapping.yaml`（`mapping_schema_version: '1.0'`）。intake 生成时会写出待填写模板；统计师在该 YAML 中确认每个 analysis/group 的显式业务字段。共享 Skill 只校验 schema、标识唯一性、Section 3/4 TFL 双向覆盖、runtime dataset binding、contract parity 和 SHA，不再根据 TFL 编号、标题、量表或 PARAMCD 推断规则。`scripts/finalize_statistical_review.R` 是唯一将已验证 mapping 渲染并写入正式 review 的入口；不得使用独立的 YAML-to-review 写入程序。
 
 ## Statistical Review 事务化签核收口
 

@@ -257,42 +257,25 @@ intake_candidate_rows <- function(tfl) {
     rows[["统计师备注或修订值"]][[2L]] <- "必须填写 <变量> <操作符> <值>，例如 COAFL eq \"是\"；无额外限制填写 not_applicable。仅填写变量名无效。"
     return(rows)
   }
-  window <- paste(tfl$window, collapse = "\n")
-  has <- function(pattern) grepl(pattern, window, ignore.case = TRUE, perl = TRUE)
-  coafl <- if (grepl("COA.?分析集", tfl$title, perl = TRUE)) "COA 分析集；具体分析标志未识别" else "未识别"
-  endpoint <- if (grepl("PedsQL", tfl$title, ignore.case = TRUE)) "PedsQL 总分及可能的分量表；终点变量和 PARAMCD 未识别" else if (grepl("疼痛强度", tfl$title, fixed = TRUE)) "疼痛强度；终点变量和 PARAMCD 未识别" else if (grepl("疼痛干扰", tfl$title, fixed = TRUE)) "疼痛干扰；终点变量和 PARAMCD 未识别" else if (grepl("肌力", tfl$title, fixed = TRUE)) "肌力评估；终点变量和 PARAMCD 未识别" else if (grepl("关节活动范围", tfl$title, fixed = TRUE)) "关节活动范围；终点变量和 PARAMCD 未识别" else "未识别"
-  dimensions <- if (has("受试者报告|家长报告")) "报告者可能区分患者和家长；量表、版本和分量表未识别" else "量表、版本、报告者和分量表未识别"
-  response_baseline <- if (has("model\\s+CHG|CHG")) "响应变量候选 `CHG`；基线变量候选 `BASE`" else "相对基线变化为候选响应；变量名未识别"
-  visit <- if (has("AVISITN|avisitn")) "访视变量候选 `AVISITN`；访视窗口和窗口内选择规则未识别" else "访视、窗口和窗口内选择规则未识别"
-  fixed <- if (has("model\\s+CHG.*avisitn.*region.*base")) "访视、地区、基线、基线×访视" else if (has("基线分数.*检查周期.*地区")) "访视、地区、基线、基线×访视" else "未识别"
-  covariance <- if (has("无结构型|type\\s*=\\s*un")) "UN；不收敛时 AR1；Kenward–Roger" else "协方差和自由度未识别"
-  estimand <- if (has("lsmeans|校正均值")) "各访视校正均值、95% CI 和 P 值" else "未识别"
-  evidence <- function(extra = "") paste0(tfl$source_ref, "；", if (nzchar(extra)) extra else "候选")
+  evidence <- paste0(tfl$source_ref, "；已识别 MMRM TFL，统计规则未从标题或关键词推断")
   rows <- data.frame(
     "规则类别" = intake_candidate_rule_categories(),
     "AI 识别的候选规则" = c(
       "未识别；需从候选 ADaM 数据集和 ADaM specification 核对",
-      coafl,
-      endpoint,
-      dimensions,
-      response_baseline,
-      visit,
-      "每个受试者 × 终点 × 访视最多一行；具体去重和行分配规则未识别",
-      fixed,
-      covariance,
-      estimand
+      "未识别",
+      "未识别",
+      "未识别",
+      "未识别",
+      "未识别",
+      "未识别；具体去重和行分配规则需统计师确认",
+      "未识别",
+      "未识别",
+      "未识别"
     ),
-    "证据来源与识别状态" = c(
-      evidence("未识别"), evidence(if (coafl == "未识别") "未识别" else "候选"), evidence("候选"),
-      evidence(if (has("受试者报告|家长报告")) "候选" else "未识别"), evidence(if (has("CHG")) "候选" else "未识别"),
-      evidence(if (has("AVISITN|avisitn")) "候选" else "未识别"), evidence("Standard Profile v1 要求；需数据核对"),
-      evidence(if (fixed == "未识别") "未识别" else "候选"), evidence(if (has("无结构型|type\\s*=\\s*un")) "候选" else "未识别"),
-      evidence(if (has("lsmeans|校正均值")) "候选" else "未识别")
-    ),
+    "证据来源与识别状态" = rep(evidence, 10L),
     "Standard MMRM Profile v1 评估" = c(
-      "当前不可执行", "需要补充规则", "当前不可执行", "需要补充规则", "可表达，待数据核对",
-      "需要补充规则", "需要补充规则", if (fixed != "未识别" && grepl("地区", fixed, fixed = TRUE)) "需要 Profile 扩展" else "需要补充规则",
-      if (has("无结构型|type\\s*=\\s*un")) "可表达，待统计师确认" else "需要补充规则", if (has("lsmeans|校正均值")) "可表达，待统计师确认" else "需要补充规则"
+      "当前不可执行", "需要补充规则", "当前不可执行", "需要补充规则", "当前不可执行",
+      "需要补充规则", "需要补充规则", "需要补充规则", "需要补充规则", "需要补充规则"
     ),
     "统计师决定" = rep("待确认", 10L),
     "统计师备注或修订值" = rep("", 10L),

@@ -30,7 +30,6 @@ study_paths <- function(script_file = script_path()) {
     data_processing_dir = file.path(study_dir, "analysis", "data-processing"),
     r_analysis_dir = file.path(study_dir, "analysis", "r"),
     sas_analysis_dir = file.path(study_dir, "analysis", "sas"),
-    legacy_mmrm_analysis_dir = file.path(study_dir, "analysis", "mmrm"),
     output_dir = file.path(study_dir, "output"),
     analysis_output_dir = file.path(study_dir, "output", "analyses"),
     log_output_dir = file.path(study_dir, "output", "logs"),

@@ -104,10 +104,6 @@ analysis_specification_execution_sha256 <- function(spec) {
   digest::digest(enc2utf8(analysis_specification_execution_text(spec)), algo = "sha256", serialize = FALSE)
 }
 
-validate_legacy_ai_review_source_disabled <- function(spec, source_path) {
-  stop("Excel review workbook gate is disabled; use statistical-review.md and analysis-specification.md.")
-}
-
 statistical_review_required_headings <- function() {
   c(
     "## 1. 审阅结论与签核",

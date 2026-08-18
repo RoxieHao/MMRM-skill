@@ -119,11 +119,11 @@ foreach ($scriptName in @('generate_standard_study.R', 'generate_case_summary.R'
 }
 
 $endpointMappingHelper = Join-Path $skillRRoot 'endpoint_mapping.R'
-$endpointMappingScript = Join-Path $skillRoot 'scripts\derive_endpoint_mapping.R'
+$structuredEndpointMappingCheck = Join-Path $skillRoot 'scripts\check_structured_endpoint_mapping.R'
 Assert-True (Test-Path -LiteralPath $endpointMappingHelper -PathType Leaf) 'Missing Endpoint Mapping helper.'
-Assert-True (Test-Path -LiteralPath $endpointMappingScript -PathType Leaf) 'Missing Endpoint Mapping derivation script.'
-& $RscriptExe --vanilla $endpointMappingScript '--self-check=true'
-Assert-True ($LASTEXITCODE -eq 0) 'Endpoint Mapping temporary self-check failed.'
+Assert-True (Test-Path -LiteralPath $structuredEndpointMappingCheck -PathType Leaf) 'Missing structured Endpoint Mapping finalization check.'
+& $RscriptExe --vanilla $structuredEndpointMappingCheck
+Assert-True ($LASTEXITCODE -eq 0) 'Structured Endpoint Mapping finalization check failed.'
 $reviewFinalizationHelper = Join-Path $skillRRoot 'review_finalization.R'
 $reviewFinalizationScript = Join-Path $skillRoot 'scripts\finalize_statistical_review.R'
 Assert-True (Test-Path -LiteralPath $reviewFinalizationHelper -PathType Leaf) 'Missing review finalization helper.'
@@ -233,7 +233,6 @@ LSMean, difference, 95% CI, p-value. estimate_id is generated later.
 $skillText = Get-Content -Raw -LiteralPath (Join-Path $skillRoot 'SKILL.md') -Encoding utf8
 foreach ($required in @(
     'human-readable-language: zh-CN',
-    'derive_endpoint_mapping.R',
     'finalize_statistical_review.R',
     'generate_analysis_specification.R',
     'intake_enrichment.R',
@@ -284,10 +283,6 @@ foreach ($route in @('statistician_authored', 'ai_source_extraction')) {
         if (Test-Path -LiteralPath $initFixture) { Remove-Item -LiteralPath $initFixture -Recurse -Force }
     }
 }
-
-$figureHelper = Get-Content -Raw -LiteralPath (Join-Path $skillRRoot 'shell_figure.R') -Encoding utf8
-Assert-Contains $figureHelper 'ggsave(png_path' 'Figure helper does not save PNG output.'
-Assert-True (-not $figureHelper.Contains('pdf_path')) 'Figure helper still generates PDF output.'
 
 $workflowText = Get-Content -Raw -LiteralPath (Join-Path $skillRoot 'references\workflow.md') -Encoding utf8
 foreach ($required in @('status = linked_source', 'PARAM/PARAMCD', 'analysis-specification.md', 'statistical-review_filled.md', 'finalize_statistical_review.R', 'generate_analysis_specification.R', 'finalization_status', 'ready_for_final_signature', 'needs_statistician_confirmation', 'run-and-collect', 'collect-only', 'fail_fast', 'analysis-run-record.csv', 'tfl-output-manifest.csv')) {

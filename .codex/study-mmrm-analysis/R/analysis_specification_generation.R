@@ -326,13 +326,6 @@ analysis_specification_publish_files <- function(files) {
   invisible(lapply(targets, specification_sha256))
 }
 
-analysis_specification_write_contract <- function(contract, path) {
-  lines <- analysis_specification_contract_text(contract)
-  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
-  writeLines(lines, path, useBytes = TRUE)
-  toupper(specification_sha256(path))
-}
-
 generate_analysis_specification <- function(study_dir, project_dir, mode = "draft", output_path = NULL) {
   if (!mode %in% c("draft", "approved")) stop("mode must be draft or approved.")
   review_path <- file.path(study_dir, "statistician-review", "statistical-review.md")

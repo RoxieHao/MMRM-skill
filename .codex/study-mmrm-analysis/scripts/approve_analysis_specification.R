@@ -38,6 +38,8 @@ reviewer <- trimws(get_arg("reviewer"))
 if (!nzchar(reviewer)) stop("--reviewer must be nonempty.")
 project_dir <- find_project_root(study_dir)
 skill_r <- file.path(project_dir, ".codex", "study-mmrm-analysis", "R")
+source(file.path(skill_r, "dependencies.R"), encoding = "UTF-8")
+ensure_skill_packages()
 for (helper in c("io.R", "specification.R", "endpoint_mapping.R", "runtime_dataset_binding.R", "analysis_specification_generation.R")) source(file.path(skill_r, helper), encoding = "UTF-8")
 
 review_path <- file.path(study_dir, "statistician-review", "statistical-review.md")

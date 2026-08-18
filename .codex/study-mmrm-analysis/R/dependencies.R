@@ -11,7 +11,6 @@ skill_runtime_packages <- function() {
     "mmrm",      # 正式 MMRM 拟合
     "emmeans",   # LSMeans / 估计量
     "callr",     # 隔离拟合与 RDS 校验
-    "ggplot2",   # shell figure 输出
     "pdftools",  # 文本型 PDF 抽取
     "officer",   # DOCX 段落/表格抽取
     "readxl"     # XLSX sheet/cell 抽取

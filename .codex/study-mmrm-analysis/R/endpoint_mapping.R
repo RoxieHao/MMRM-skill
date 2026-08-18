@@ -123,14 +123,6 @@ endpoint_mapping_render_review_section <- function(lines, mapping) {
   c(lines[seq_len(section4 - 1L)], replacement, lines[section5:length(lines)])
 }
 
-write_endpoint_mapping_to_review <- function(source_review, target_review = source_review, mapping_path = NULL) {
-  if (is.null(mapping_path)) mapping_path <- file.path(dirname(target_review), "endpoint-mapping.yaml")
-  mapping <- endpoint_mapping_read(mapping_path)
-  lines <- readLines(source_review, encoding = "UTF-8", warn = FALSE)
-  writeLines(endpoint_mapping_render_review_section(lines, mapping), target_review, useBytes = TRUE)
-  invisible(list(target_review = target_review, mapping_count = nrow(mapping), issue_count = 0L))
-}
-
 endpoint_mapping_self_check <- function(skill_dir) {
   tmp <- tempfile("endpoint-mapping-check-"); dir.create(tmp, recursive = TRUE); on.exit(unlink(tmp, recursive = TRUE, force = TRUE), add = TRUE)
   path <- file.path(tmp, "endpoint-mapping.yaml")
