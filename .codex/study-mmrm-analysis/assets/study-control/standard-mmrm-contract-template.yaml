@@ -1,0 +1,77 @@
+profile_version: standard-mmrm-profile/v1
+study:
+  study_id: STUDY-ID
+execution:
+  # Optional block. If omitted, fail_fast defaults to false. Explicit CLI always wins.
+  fail_fast: false
+analyses:
+  - analysis_id: MMRM-ENDPOINT-001
+    tfl_id: TFL-001
+    title: Endpoint change from baseline by visit
+    dataset:
+      file: analysis.csv
+    mappings:
+      subject: subject_id
+      response: change_value
+      baseline: baseline_value
+      visit: visit_number
+      visit_label: visit_label
+      treatment: treatment_group
+    treatment:
+      # Exactly two unique levels in approved reference/comparator order; deliberately not alphabetical.
+      levels:
+        - ZX-Reference
+        - A-Comparator
+      reference: ZX-Reference
+      comparator: A-Comparator
+      contrast_direction: comparator_minus_reference
+      confidence_level: 0.95
+      multiplicity_adjustment: none
+    filters:
+      - variable: analysis_flag
+        operator: eq
+        value: Y
+    groups:
+      - id: ENDPOINT-A
+        label: Endpoint A
+        predicates:
+          - variable: parameter_code
+            operator: eq
+            value: ENDPA
+    # Exactly one endpoint definition is required for every groups[].id; its selection must be equivalent to that group's predicates.
+    # Multiple selected codes require mutually_exclusive_versions or approved_derivation; the latter also requires adapter pins and non_overlap_allocation_proof.
+    endpoint_definitions:
+      - group_id: ENDPOINT-A
+        endpoint_variable: parameter_code
+        selected_codes:
+          - ENDPA
+        selection_mode: single_code
+        dimensions:
+          instrument: { variable: not_applicable, values: [] }
+          version: { variable: not_applicable, values: [] }
+          reporter: { variable: not_applicable, values: [] }
+          subscale: { variable: not_applicable, values: [] }
+        row_allocation_rule: one_row_per_subject_endpoint_visit
+    fixed_effects:
+      - visit
+      - baseline
+      - baseline_by_visit
+      - treatment
+      - treatment_by_visit
+    covariance:
+      primary: UN
+      fallback:
+        - AR1
+        - CS
+        - TOEP
+    df_method: Kenward-Roger
+    estimands:
+      visit_lsmeans: true
+      treatment_visit_lsmeans: true
+      pairwise_differences: true
+    output:
+      raw_file: mmrm_raw.csv
+      final_file: mmrm_final.csv
+    # Approved generation never creates adapters. Scaffold manually before approval, then pin both fields.
+    # adapter_file: studies/STUDY-ID/analysis/r/standard_adapter.R
+    # adapter_sha256: REPLACE_WITH_64_HEX_SHA256

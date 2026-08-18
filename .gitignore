@@ -15,3 +15,10 @@ tmp_sap_extract/
 
 # Common generated model objects
 *.rds
+
+# Local study working data (real datasets, large; never publish)
+studies/
+
+# Editor and stray local review artifacts
+.vscode/
+/statistical-review_filled.md

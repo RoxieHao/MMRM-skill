@@ -1,101 +1,28 @@
-# Study MMRM template.
-# Copy this file into a study `model-run/` directory, then fill the study-specific
-# mapping section from confirmed SAP/shell/ADaM rules.
-
+# Generated Standard MMRM Profile v1 wrapper. Do not edit.
 options(encoding = "UTF-8")
 
-suppressPackageStartupMessages({
-  library(haven)
-  library(dplyr)
-  library(mmrm)
-  library(emmeans)
-})
-
 script_arg <- grep("^--file=", commandArgs(FALSE), value = TRUE)
-if (length(script_arg) != 1) stop("Run this file with Rscript.")
-script_file <- normalizePath(sub("^--file=", "", script_arg), winslash = "/")
-skill_dir <- dirname(dirname(dirname(dirname(script_file))))
+if (length(script_arg) != 1L) stop("\u8bf7\u4f7f\u7528 Rscript \u8fd0\u884c\u672c\u6587\u4ef6\u3002")
+script_file <- normalizePath(sub("^--file=", "", script_arg), winslash = "/", mustWork = TRUE)
 
-source(file.path(skill_dir, "R", "study_paths.R"))
-source(file.path(skill_dir, "R", "io.R"))
-source(file.path(skill_dir, "R", "model.R"))
-source(file.path(skill_dir, "R", "shell_table.R"))
+find_project_dir <- function(path) {
+  current <- dirname(path)
+  repeat {
+    helper <- file.path(current, ".codex", "study-mmrm-analysis", "R", "standard_engine.R")
+    if (file.exists(helper)) return(normalizePath(current, winslash = "/", mustWork = TRUE))
+    parent <- dirname(current)
+    if (identical(parent, current)) stop("\u65e0\u6cd5\u5b9a\u4f4d project root\u3002")
+    current <- parent
+  }
+}
 
-paths <- study_paths(script_file)
-dir.create(paths$model_output_dir, recursive = TRUE, showWarnings = FALSE)
-dir.create(paths$table_output_dir, recursive = TRUE, showWarnings = FALSE)
-
-# ---- Study-specific mapping -------------------------------------------------
-
-study_id <- "STUDY_ID"
-tfl_id <- "TFL_ID"
-tfl_title <- "TFL_TITLE"
-source_dataset_file <- "adam_dataset.sas7bdat"
-parameter_filter <- function(data) data
-analysis_filter <- function(data) data
-visit_levels <- character()
-response_var <- "CHG"
-baseline_var <- "BASE"
-subject_var <- "USUBJID"
-visit_var <- "AVISIT"
-covariance_formula <- CHG ~ BASE * AVISIT + us(AVISIT | USUBJID)
-emmeans_spec <- ~ AVISIT
-
-stop("Fill the study-specific mapping section before running this template.")
-
-# ---- Data preparation -------------------------------------------------------
-
-analysis_source <- read_sas(file.path(paths$adam_dir, source_dataset_file))
-analysis_data <- analysis_source %>%
-  parameter_filter() %>%
-  analysis_filter() %>%
-  filter(
-    !is.na(.data[[response_var]]),
-    !is.na(.data[[baseline_var]]),
-    !is.na(.data[[subject_var]]),
-    !is.na(.data[[visit_var]])
-  ) %>%
-  mutate(
-    "{subject_var}" := factor(.data[[subject_var]]),
-    "{visit_var}" := if (length(visit_levels) > 0) {
-      factor(.data[[visit_var]], levels = visit_levels)
-    } else {
-      factor(.data[[visit_var]])
-    }
-  )
-
-duplicates <- analysis_data %>%
-  count(.data[[subject_var]], .data[[visit_var]], name = "n_records") %>%
-  filter(n_records > 1)
-
-if (nrow(duplicates) > 0) stop("Duplicate subject-visit records found.")
-
-# ---- Model run --------------------------------------------------------------
-
-fit <- mmrm(
-  formula = covariance_formula,
-  data = analysis_data,
-  reml = TRUE,
-  control = mmrm_control_for_covariance("UN")
-)
-
-lsmeans <- as.data.frame(summary(emmeans(fit, emmeans_spec), infer = c(TRUE, TRUE)))
-status <- if (inference_complete(lsmeans)) "fit" else "fit_incomplete"
-
-lsmeans <- lsmeans %>%
-  mutate(
-    study_id = study_id,
-    tfl_id = tfl_id,
-    tfl_title = tfl_title,
-    status = status,
-    .before = 1
-  )
-
-write_utf8_bom_csv(lsmeans, file.path(paths$model_output_dir, "model_lsmeans.csv"))
-
-# ---- Shell-ready output -----------------------------------------------------
-
-# Build the final TFL table here from the shell-required rows/columns. Keep raw
-# model output in `model-run/output/`; write shell-ready outputs to
-# `model-run/output/tables/`.
-
+project_dir <- find_project_dir(script_file)
+source(file.path(project_dir, ".codex", "study-mmrm-analysis", "R", "study_paths.R"), encoding = "UTF-8")
+source(file.path(project_dir, ".codex", "study-mmrm-analysis", "R", "io.R"), encoding = "UTF-8")
+source(file.path(project_dir, ".codex", "study-mmrm-analysis", "R", "specification.R"), encoding = "UTF-8")
+source(file.path(project_dir, ".codex", "study-mmrm-analysis", "R", "standard_contract.R"), encoding = "UTF-8")
+source(file.path(project_dir, ".codex", "study-mmrm-analysis", "R", "standard_engine.R"), encoding = "UTF-8")
+analysis_id <- "<ANALYSIS_ID>"
+specification_sha256 <- "<SPECIFICATION_SHA256>"
+if (any(grepl("^<.+>$", c(analysis_id, specification_sha256)))) stop("wrapper \u5c1a\u672a\u751f\u6210\u5b8c\u6574\u3002")
+run_standard_mmrm_analysis(script_file, analysis_id, specification_sha256)

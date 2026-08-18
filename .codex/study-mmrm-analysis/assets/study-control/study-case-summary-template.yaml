@@ -1,0 +1,29 @@
+schema_version: standard-mmrm-case-summary/v1
+study_id: STUDY-ID
+profile_version: standard-mmrm-profile/v1
+contract_sha256: REPLACE_WITH_CONTRACT_SHA256
+analysis_catalog: []
+run_records: []
+diagnostic_metadata: []
+adapter_patterns:
+  # registry status: candidate/promoted
+  registry: []
+  # decision: pending/rejected/approved; approved requires reviewer, UTC time,
+  # regression_test_status=passed, and >=2 accepted evidence IDs from >=2 unique studies.
+  promotion_records: []
+# candidate_status: candidate/rejected
+pattern_candidates: []
+# Closed aggregate-only evidence schema:
+# evidence_id, pattern_id, study_id, analysis_id,
+# aggregate_analysis_count, aggregate_success_count, aggregate_failure_count,
+# aggregate_status (complete/partial/failed), independent_study=true,
+# aggregate_only=true, status (candidate/accepted/rejected).
+# Free aggregate summaries, nested records, row data, and subject-like identifiers are forbidden.
+pattern_evidence: []
+promotion:
+  status: candidate
+  engine_change: not_promoted
+  minimum_evidence: at_least_2_independent_studies
+  human_approval_required: true
+  regression_tests_required: true
+  automatic_engine_modification: false

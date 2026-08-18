@@ -1,88 +1,88 @@
 # Rules
 
-这份文件用于记录通常可以跨分析类型固定下来的 MMRM 原则。
+这份文件记录可跨 study 复用的 MMRM 原则。所有 study-specific 统计选择必须最终展开在唯一 approved `analysis-specification.md` 中。
 
-## 共享变量角色
+## 共享变量与输出角色
 
-review 和 implementation 通常围绕下面这些变量展开：
-- `BASE`
-- `AVAL`
-- `CHG`
-- `AVISIT`
-- `AVISITN`
-- treatment variable when applicable
-- covariates actually used in the fitted model
-- analysis population flag when applicable
+常见模型变量：`USUBJID`、`AVAL`、`CHG`、`BASE`、`AVISIT`、`AVISITN`、treatment（如适用）、实际 covariates、population/analysis record flags。
 
-## 共享输出预期
+常见推断：LSMean、SE、df、confidence interval、p-value/contrast、visit-level summary。模型明细不能替代 shell-like final TFL；shell 要求的 n/Missing、描述统计、LSMean(SE)、CI、contrast 和 footnote denominator 必须逐项映射。缺少必需 cell 时只能 `partial/blocked`。
 
-除非 source materials 明确另有规定，否则 MMRM 输出通常聚焦于：
-- `LSMEAN`
-- confidence interval
-- p-value or contrast result
-- visit-level summaries
-- traceable analysis dataset variables
+区分：
 
-输出必须回到具体 TFL。不要只报告“某个 endpoint 跑通了”；每次 study execution 应先列出所有 MMRM 相关 TFL，再说明每个 TFL 的 dataset、PARAM/PARAMCD、模型运行状态和产物位置。
+- direct MMRM output：模型直接产生目标估计；
+- MMRM prediction/imputation：MMRM 只是下游分析输入，下游未完成时 TFL 不得标记 complete。
 
-最终放入 `model-run/output/tables/` 的 table CSV / workbook sheet 必须是 shell-ready 输出，而不是只给模型对象或 `emmeans` 原始明细。生成每个 TFL 时，先从 shell/title/body/footnote/program note 提取该表需要展示的全部信息，再把模型推断结果拼回相同表结构；常见必需项包括表头 arm N、表体 n / Missing、baseline 或 EoT / visit 的描述性统计（Mean、SD 或 SE、Median、Min/Max、Q1/Q3 等，按 shell 要求）、LSMean(SE)、CI、contrast / treatment difference、p-value、检验方法和 footnote 对应的 denominator 定义。模型明细、visit-level LSMeans、contrast 明细和 QC 中间表应保留为旁路 artifact，用于审查和追踪，但不得替代最终 TFL 输出；如果某个 shell-required cell 无法从当前数据或已确认规则生成，该 TFL 只能标为 partial / blocked / needs confirmation，不能标为完成。
+## Source Traceability
 
-扫描 MMRM TFL 时必须区分分析角色：
-- direct MMRM output：模型本身直接产生 LSMean、CI、p-value 或 treatment contrast。
-- MMRM prediction/imputation：MMRM 只用于预测或填补缺失值，最终 TFL 可能还要接 ANCOVA、描述统计或图形。
+新 study 先建立 `input/`。统计师将 SAP、shell、ADaM、ADaM/TFL specification 等原始材料放入此处，或直接填写可选的 `input/statistician-analysis-input.md` 以定义/补充分析；该 Markdown 与原始材料同为 intake input，不是批准文件。AI 必须在创建唯一 pending `statistical-review.md` 前登记并分析全部 input，不能从旧 study、历史 code 或既有结果补规则。
 
-不要把 MMRM prediction/imputation TFL 标记为已完成，除非预测/填补后的下游分析也已经实现并运行。
+每个 mapping、filter、model term、derivation、estimand 和 output rule 必须有 source 或人工确认。preferred sources：SAP、shell/footnote/program note、ADaM spec/define、production program、统计师/用户确认。
 
-Footnote 和 program note 必须作为 source rule 读取。特别是 baseline、EoT、visit window、imputation、analysis population、model terms、covariance fallback、CI/p-value 解释等内容，不能只从表头或 ADaM 变量名推断。
-
-## Source Traceability Discipline
-
-AI 写出的每个规则、mapping、filter、model term、derivation、output rule 都必须有明确 source trace：
-
-- preferred sources: SAP, table/figure/listing shell, footnote, program note, ADaM spec, define/derivation document, SP/SAS/R production program, statistician/user confirmation.
-- 如果 source materials 没有明确提到，不要把 AI 推断写成 confirmed rule。
-- 如果 AI 对某条未写明规则把握很大，可以作为 `AI-suggested; needs statistician review` 列出来，并说明推断理由和需要确认的问题。
-- 没有 source 的规则不能进入 primary filter、analysis population、model formula、derivation 或 final output formatting。
-- 已写入 R code 的每个非机械性选择，都应能回到 `scan-summary.md` 或 `adam-parameter-mapping.md` 的 source rule。
-- 机械性实现细节可以标为 implementation choice，例如 UTF-8 BOM、文件名、日志路径、R 对象命名；但统计规则不能用 implementation choice 伪装。
-
-## Data Processing Conditions / Population Flags
-
-每个 TFL 都必须识别真正用于限定分析数据的条件变量，包括 population flag、analysis record flag、baseline/EoT/window/imputation flag，以及必要时的 `DTYPE`、`ANLxxFL`、`CRITxxFL` 等 ADaM derived flag。
+AI/作者候选只能进入同一份 pending `statistical-review.md` 的第 3 节逐 TFL 候选规则表。每个明确 MMRM TFL 都必须有十条固定规则：分析数据集、分析人群、终点变量与取值、终点维度、响应与基线、访视与窗口、重复记录与行分配、固定效应、协方差与自由度、估计量与输出。每行均须保留当前 study source reference 和识别状态；未确认规则必须明确标为未识别或候选，不能进入 primary filter/formula/output。统计师逐行采用、修改或拒绝；approved review 中不得有待确认，修改/拒绝必须有备注。approved code 中每个非机械选择必须能回到 specification execution section、单一审阅文件的 source reference 和已批准的 endpoint mapping。UTF-8 BOM、对象名和日志路径等可标为 implementation choice，统计规则不能。
 
 ## ADaM Dataset Selection
 
-每个 MMRM TFL 都必须先做全 ADaM dataset scan，再决定目标 dataset。不能因为在 `ADLB`、`ADVS`、`ADQS` 或任何第一个扫描到的 dataset 中找到 `PARAMCD`、`AVAL`、`BASE`、`CHG`，就停止寻找。
+不得因第一个 dataset 含 `PARAMCD/AVAL/BASE/CHG` 就停止：
 
-选择原则：
-- 先列出所有含有目标 endpoint / PARAM / PARAMCD / display concept 的 ADaM dataset。
-- 比较每个候选 dataset 是否包含 TFL 需要的 population flag、analysis record flag、visit/window/EoT/imputation flag、derived PARAM、treatment/strata/covariate、response 和 baseline。
-- 如果存在 `ADEFF` 或 endpoint-specific ADaM，并且 TFL 是疗效分析，优先检查这些专用 dataset；不要只因为 endpoint 源自 lab/vital/COA 就默认使用原始 BDS。
-- 如果多个 dataset 都能运行模型，选择与 SAP/shell/spec/TFL footnote 最贴近、派生最完整、filter 最少且 traceability 最清楚的 dataset。
-- 记录被排除的主要候选 dataset 和原因，例如缺少 efficacy-derived PARAM、缺少正确 analysis flag、只含原始 records、或 flag 含义不匹配。
-- 如果无法确认最合适的 dataset，标记为 `Needs human/statistician confirmation`，不要把 first-hit dataset 写成默认规则。
+1. 从 shell/title/footnote/program note 识别 endpoint family。
+2. 扫描 ADaM schema，列出含目标参数、response/baseline/visit、population/record flags 的候选。
+3. 比较 distinct PARAM/PARAMCD/PARCAT、visits、flags、derived records、covariates。
+4. 优先选择与 SAP/shell/spec 最贴近、派生最完整、filter 最少且 trace 最清楚的 dataset。
+5. 在 review/backup 中记录排除原因；无法确认时阻止 approved specification。
 
-处理原则：
-- 不要因为 flag 名像分析标志就自动使用。
-- 不要因为能手写 filter 就忽略 ADaM 已经衍生好的约束变量。
-- 先从 TFL title、population、footnote、program note 明确需要哪些数据限制，再映射到 ADaM 变量。
-- 如果 `ANLxxFL`、`CRITxxFL` 或其他 derived flag 与 source rule 明确对上，可以作为实际 filter 使用，并在 `adam-parameter-mapping.md` 记录。
-- `adam-parameter-mapping.md` 只需要记录实际使用或必须确认的约束变量，不需要枚举每一个未使用 flag。
-- 如果一个看似相关的 flag 是必须确认项，记录为 unresolved condition，而不是写进代码默认值。
+不要因 flag 名看似正确就使用；先从 source rule 明确约束，再映射 `ANLxxFL/CRITxxFL/DTYPE` 等。最终使用的 dataset、variables 和 filter 写入 approved specification。
 
-不要假设 ADaM `PARAMCD` 一定等于 TFL 展示或建模单位。某些 COA/PRO 表会把多个 raw PARAMCD 合并为一个 display/analysis unit，例如按报告者、年龄版本、部位、侧别或量表版本合并。遇到 shell 中的 `<重复其他分量表>`、`<受试者报告/家长报告>`、部位/侧别等占位符时，必须先解析这些层级，再决定是否合并 PARAMCD。
+## ADaM Specification 解析
 
-## 默认建模实现
+Workbook 常有说明行，必须先定位真实 header：
 
-默认使用 R package `mmrm` 完成 MMRM 建模。
+- dataset sheet：`Variable/Label/Type/Source/Derivation`；
+- PARAM sheet：`PARAM/PARAMCD/PARAMN/PARCAT/AVAL/derivation`；
+- visit sheet：`AVISIT/AVISITN/AWLO/AWHI/AWTARGET`。
 
-SAP 或 shell 中给出的 SAS `PROC MIXED` code 应作为统计规则来源或 QC 对照，而不是默认执行路径。除非用户明确要求生成 SAS 程序，否则 study-specific implementation 应优先生成 R 代码并调用 `mmrm`。
+记录读过的 sheet/header row 和解析缺口。只识别 sheet 名不等于 mapping 已确认。
 
-如果 source materials 明确要求 SAS、其他 R package 或特定验证环境，应把该要求记录为 study-specific decision。
+## Data Processing 与 QC
 
-R 脚本写出 text log 或 summary 时，默认使用 UTF-8 connection，尤其是在 Windows 环境中，避免中文 visit、endpoint 或 flag 值乱码。写出供 Excel 双击打开的 CSV 时，使用 UTF-8 with BOM；如果 R connection 不支持 `UTF-8-BOM`，先写入 BOM bytes `EF BB BF`，再以 UTF-8 append 正文。
+Specification 必须定义：population、record flag、endpoint filter、baseline、response、visit/window、within-window selection、duplicates、missing、join 和特殊 derivation。
 
-当目标是复现 SAS `PROC MIXED ddfm=kenwardroger` 的 LSMean CI/p-value，且 covariance structure 是 UN / unstructured 时，`mmrm` 控制应指定：
+拟合前至少检查：
+
+- source 文件存在且 hash 匹配；
+- 必需变量和可用类型；
+- 筛选前后及排除记录数；
+- response/baseline/visit/subject missing；
+- 同一 subject×analysis group 的 BASE 一致；
+- subject×analysis group×visit 唯一；
+- class/fixed effect levels 可估计；
+- post-baseline visit 数和 subjects 足够。
+
+不可估计的 source-required term 不得静默删除。production decision 必须回到 specification/统计师；技术验证可报告 blocked/failed，但不能改变统计含义。
+
+如果 approved specification 明确定义条件项省略（例如按优先级选择候选协变量，并在不存在或少于可估计水平时省略），代码可以按批准条件继续拟合，但必须记录候选选择、水平数、`included/omitted`、省略原因及实际公式。批准的条件省略不得被实现成未批准的 fallback，也不得静默替换为其他变量。R 与 SAS 必须采用相同条件和实际模型项。
+
+## COA/PRO Mapping
+
+不同量表必须明确年龄版本、报告者与分量表 mapping；不同部位或层级的 endpoint 也必须确认 TFL scope。这些结论写入 study-local `statistician-review/endpoint-mapping.yaml`：每个 analysis/group 一行，保留 endpoint variable、selected codes、selection mode、instrument/version/reporter/subscale、row allocation rule、source reference 和 `accepted/modified`。共享 Skill 不得从 TFL 编号、标题或 PARAMCD 推断这些规则，只做校验。该 YAML 必须与 typed contract 的 `endpoint_definitions` 双向一致；四项 dimensions 全部不适用时填 `not_applicable`，否则按固定顺序写变量和值。finalizer 自动计算并回填 `endpoint_mapping_sha256`，其后任何改动都会因 SHA 不一致而阻断生成。复杂 mapping 不得只留自然语言。
+
+## 单臂与 Treatment
+
+单臂 COA/PRO 中的剂量文字通常是 filter/display stratum，不自动成为 treatment comparison。只有 SAP/shell 明确组间 estimand 才加入 treatment 或 treatment-by-visit。实际过滤字段和值必须在 specification 定义。
+
+Randomized efficacy route 必须在 typed contract 定义 exactly two unique treatment levels（按 reference/comparator 批准顺序）、reference、comparator、`contrast_direction=comparator_minus_reference`、`confidence_level=0.95` 和 `multiplicity_adjustment=none`。V1 不支持其他方向、多于两水平或其他 multiplicity 方法；不得从数据顺序或 shell 排版猜测。数据准备必须拒绝未批准 level 或缺少任一批准 level。
+
+## Standard MMRM Profile v1 与 Adapter 边界
+
+标准 profile 使用 typed YAML contract，只允许已实现和可验证的 dataset、SAS V7-safe variable mapping、严格 predicates、path-safe analysis groups、`visit/baseline/baseline_by_visit/treatment/treatment_by_visit` fixed effects、`UN/AR1/CS/TOEP` covariance、Kenward-Roger/Satterthwaite 及 visit/treatment estimands。`eq/ne` 只允许单一 non-NA atomic scalar；`in/not_in` 只允许非空 unnamed atomic 无 NA vector；数值比较只允许单一 finite numeric；missing operators 不得有 value。缺字段、未知枚举、identity/hash 或 model destination 不一致时 fail closed，不从自然语言猜默认值。
+
+Shared engine 负责 input SHA、标准 mapping/QC、公式、隔离拟合、fallback、inference、diagnostics、RDS identity、run record、artifact validation 和 collector。复杂 join、derivation、visit window、endpoint grouping 或 treatment regrouping 留在 `standard_mmrm_adapter(data, analysis, context)`；adapter 必须在 approved contract 中固定 project-relative path 和 SHA-256，只返回满足 contract 的 data frame，不拟合模型、不写 manifest。SAS 无等价 adapter 时只生成 `sas_adapter_required` 阻断模板，不伪装为可执行等价实现。
+
+## 强制建模实现
+
+正式 MMRM 必须直接或通过 study-local helper 调用 R package `mmrm`。不得用 `nlme/lme4/glmmTMB/SAS` 替代正式 R fit。SAS `PROC MIXED` 仅作为规则来源和手工 QC 对照。
+
+UN 且目标是对照 `PROC MIXED ddfm=kenwardroger` 时：
 
 ```r
 mmrm_control(
@@ -91,78 +91,60 @@ mmrm_control(
 )
 ```
 
-这个 `vcov = "Kenward-Roger-Linear"` 规则只固定给 UN / unstructured covariance。其他 covariance structure 不要自动套用，除非另有 study-specific 证据或 cross-study 验证。
-
-LSMean p-value 输出规则可更通用：优先直接使用：
+Linear covariance adjustment 不自动用于其他 covariance。LSMean p-value 优先来自：
 
 ```r
 summary(emmeans(...), infer = c(TRUE, TRUE))$p.value
 ```
 
-不要在表格脚本中另行手算 p-value，除非明确记录为 QC 计算。这个规则来自 FCN-159-002 test case：LSMean estimate 已对齐 SAS，但默认 `Kenward-Roger` 的 CI/p-value 与 SAS SP 不一致，改用 `Kenward-Roger-Linear` 后对齐。
+不在 table formatting 中另行手算，除非明确作为 QC。
 
-## 模型项可估计性检查
+## Covariance 与 Convergence
 
-SAP/shell 中识别出的模型项必须先记录，再判断在当前测试数据中是否可估计。
+Specification 必须定义 Primary、确定 fallback order 和触发条件。只在 Primary fit error 或未形成可用模型时按顺序 fallback；不得临时发明结构。
 
-如果某个 factor covariate 或 fixed effect 在当前分析数据中只有一个 level：
-- 在 analysis definition 中保留该 source rule。
-- 在 code plan/run notes 中记录为不可估计项。
-- model-run test 可以临时剔除该项以验证其余 MMRM workflow。
-- production decision 必须标记为 statistician confirmation，除非 source materials 已明确允许该处理。
+记录每次 attempt、warning/message、最终 covariance 和 fallback。以下情况至少 Yellow/需复核：fallback、convergence warning、singular design、dropped visit/factor level、negative variance。批准结构均失败或 inference 不完整为严重问题。
 
-模型返回对象不等于 TFL 已成功。只有当前 TFL 要求的 estimate、SE、df、CI、p-value 或 contrast 字段均可估计且非缺失时，参数状态才能写为 `fit`。模型已返回但必要推断字段不完整时，写为 `fit_incomplete`，保留输出和 warning，但不得计入成功参数。
+模型对象存在不代表成功。只有必需 estimate、SE、df、CI、p-value/contrast 全部非缺失时 group 才 complete；部分 group 失败时 analysis 为 partial。
 
-## 缺失数据默认理解
+## 缺失数据
 
-默认理解：
-- MMRM 依赖模型在 `MAR` 假设下完成推断
-- 除非 SAP 明确要求，否则不要额外加 ad hoc imputation
-- 如果出现 LOCF 或其他填补方法，应把它视为单独分析路径，而不是隐藏默认值
+默认 MMRM 在 MAR 下推断；除非 specification 明确，不加 ad hoc imputation。LOCF 或其他填补属于独立 analysis path，不是隐藏默认。
 
-## 协方差结构模板
+## 诊断风险语言
 
-使用两层结构：
+人读报告只用：
 
-1. SAP 明确首选的 covariance structure
-2. 收敛失败时允许使用的 fallback structure
+- 未检测到明显的计算收敛风险。
+- 模型已得到结果，但存在需要统计师复核的计算风险。
+- 模型未成功或结果不完整，存在严重计算问题。
+- 模型未执行，无法评估计算风险。
 
-记录 study 实际使用的 fallback path。不要发明 study materials 里没有支持的协方差结构。
+机器 CSV 可使用 `Green/Yellow/Red/Not assessed`，并必须附 `risk_reason`。
 
-## 固定项与可变项
+## 中文与文件格式
 
-通常可固定：
-- need for baseline adjustment
-- need for visit as a categorical repeated factor
-- need for subject-level repeated structure
-- need for run log and review output
-- use of R package `mmrm` as default model engine
-- pre-fit estimability checks for fixed effects, covariates, interactions, repeated subject, and repeated visit terms
+人读内容中文；技术标识原文。英文 warning/error 保留并附中文解释。Excel-facing CSV 使用 UTF-8 BOM。text log 默认 UTF-8。
 
-通常需要按分析类型或 study 变化：
-- treatment effect terms
-- region or stratification factors
-- baseline-by-visit versus treatment-by-visit interaction
-- endpoint family and score direction
-- visit windowing specifics
-- baseline derivation rule
+为避免 Windows PowerShell/codepage 破坏源码中文，`R/templates/*.R` 与 `scripts/*.{R,ps1}` 必须保持 ASCII-only。用户可见中文错误、日志或提示在这些源码中使用 `\uXXXX` Unicode 转义，运行时仍输出中文。Markdown 文档、review/specification/report 正文，以及负责生成大段 Markdown 中文内容的 R helper，可以直接使用 UTF-8 中文；但发现 mojibake 时必须修复，不能把乱码当作有效中文。
+
+禁止：重复 TXT/Markdown TFL、endpoint/single-visit 子集、PDF figure、`mmrm_variable_review.md` 和多个正式 manifest。每 analysis 保留必要 `.rds`、log、精简 diagnostics、raw/final TFL 和 run record。
+
+## Analysis Specification Gate
+
+两条 route 均不允许自动批准。`statistician_authored` 与 `ai_source_extraction` 都必须使用单一 `statistical-review.md` 加 study-local `endpoint-mapping.yaml`，并要求 `approval_mode: human_review`。review front matter 必须 approved，reviewer/UTC 时间/approved execution SHA 有效；八个固定章节和 Issues 表完整；`endpoint_mapping_file` 与 `endpoint_mapping_sha256` 必须存在且与 YAML 实际内容一致；mapping 覆盖且仅覆盖 specification Analysis ID，并全部为 `accepted/modified`；所有 issue resolved。review SHA、mapping SHA、签核字段和 execution SHA 必须与 approved specification 一致。
+
+代码只读取通过这些校验的 `analysis-specification.md`；review 文件、source documents、legacy workbook 和 `tfl-solutions.csv/approval.yaml` 不得作为 runtime fallback。
+
+## 数据上下文
+
+- `none`：只生成 code/template，阻止拟合。
+- `unknown`：可生成 code，执行前阻断。
+- `dummy`：可做技术诊断/手工 R-SAS 对照，不作正式解释。
+- `production`：可按 intended use 运行。
+
+状态只有在 SAS template 实际运行、结果导回并比较后才能升级为 `*_r_sas_compared`。
 
 ## Review 纪律
 
-在 scan 和 planning 文档里，明确区分：
-- confirmed rule
-- implementation choice
-- unresolved statistician question
-
-如果规则没有确认，就继续保持开放状态。不要把不确定性偷偷变成代码默认值。
-
-## Statistician Mapping Confirmation Gate
-
-在 AI 开始写 study-specific R code 之前，必须先完成 mapping confirmation：
-
-- 输出并展示 `scan-summary.md`、`analysis-content.md`、`adam-parameter-mapping.md` 的核心 mapping。
-- 明确列出所有 `Needs statistician confirmation`、`Needs human input`、dataset selection 不确定、flag/filter 不确定、footnote 未映射的项。
-- 明确列出所有 `AI-suggested; needs statistician review` 项，不能把它们混进 confirmed mapping。
-- 等统计师/用户确认 mapping 正确，或补充/修正不准确 mapping 后，再进入 R code。
-- 如果用户明确要求先做 exploratory prototype，可以写成探索脚本，但结果不能标记为正式 model-run，也不能覆盖 confirmed mapping。
-- 如果 mapping 有不准确或缺失，不要用代码默认值替代；先更新 mapping 文档，再写或修改 R。
+review 阶段明确区分 confirmed rule、AI candidate、implementation choice、unresolved question。approved specification 的 execution sections 不得含 candidate、TODO/TBD、pending/blocked 或多种合理解释。遇到歧义先提问，不用代码默认值替代。

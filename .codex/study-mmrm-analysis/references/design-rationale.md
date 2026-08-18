@@ -52,7 +52,7 @@
 - 两个或多个 treatment arm
 - 明确的 analysis set，例如 `FAS`、`PPS`、`ITT`
 - 基线值、post-baseline 连续型疗效指标、访视信息
-- 可能还包括 stratification factor、region 或其他设计因素
+- 可能还包括 source-approved design factors
 
 #### 常见模型项
 
@@ -61,7 +61,7 @@
 - visit 通常作为分类变量
 - treatment 是核心 fixed effect
 - `treatment-by-visit` 往往是关键 interaction
-- 如 SAP 明确要求，可加入 stratification factor、region 或其他 design factor
+- 如 source 明确要求，可加入其他 design factor
 
 #### 常见输出
 
@@ -105,7 +105,7 @@
 - endpoint-specific analysis set
 - 多个量表、子量表、症状评分或功能评分
 - baseline 值、post-baseline 评分、访视信息
-- 可能还包括 region、cohort、age group 等分层因素
+- 可能还包括 source-approved cohort、age group 或其他分层因素
 
 #### 常见模型项
 
@@ -113,7 +113,7 @@
 - baseline 通常作为 covariate
 - `baseline-by-visit` 常常值得考虑
 - visit 通常作为分类变量
-- 如 SAP 指定，也可能纳入 region、cohort、age group 等因素
+- 如 source 指定，也可能纳入其他可估计分层因素
 - treatment comparison 通常不是主要模型项
 
 #### 常见输出
@@ -129,7 +129,9 @@
 - endpoint family 的范围
 - 每个量表的 score direction、baseline 定义和 change 定义
 - 同一模型壳是否复用于多个 endpoint
-- 是否需要纳入 cohort / region / subgroup 因素
+- 是否需要纳入其他 source-approved design / subgroup 因素
+- 剂量组文字是 data filter / table header，还是 source 明确要求的 comparison factor
+- summary dataset 与 item-level dataset 的建模/追溯分工
 - covariance structure 的首选项与降级顺序
 - 输出是以“总体纵向变化”为中心，还是还要加入临床意义支持性解释
 
@@ -137,38 +139,30 @@
 
 这类分析更适合沉淀为一种“以组内变化为核心的 COA/PRO 纵向 MMRM 方法模板”。
 
-## 这个 Skill 适合固定下来的内容
+## 固定引擎与开放边界
 
-这些内容适合在 skill 层面标准化：
-- workflow 顺序
-- 文档输出物
-- 未确认统计规则必须显式保留
-- run log 和 traceability 必须保留
-- 优先使用 study-specific implementation，而不是过早抽成大一统框架
+适合固定在 skill 的内容包括 approved gate、typed contract schema、linked-source SHA、标准 mapping/QC、`mmrm` 隔离拟合、批准 covariance fallback、inference、analysis-scoped artifacts、RDS identity、collector 和唯一 manifest。这些机械且高风险的执行细节不应由每个新模型重新编写。
 
-## 这个 Skill 需要保持开放的内容
+保持 analysis/study-specific 的内容包括 endpoint definition、复杂 baseline/visit derivation、join、record selection、特殊 grouping、精确 fixed effects/covariance/estimands 和 TFL display。标准 profile 能表达的部分进入 approved typed contract；超出 profile 的数据转换进入带 digest 的薄 adapter。Shared engine 不解释任意自然语言，也不复制某个 study 的变量和规则。
 
-这些内容应继续保留为 analysis-specific：
-- endpoint definition
-- baseline derivation
-- visit-window assignment
-- within-window record selection
-- 精确的模型项
-- covariance fallback sequence
-- endpoint-family handling 细节
+## 轻量案例库与模式晋升
+
+每个完成并通过 artifact validation 的 study 可以生成 `backup-trace/study-case-summary.yaml`。它只记录 profile、contract identity、analysis catalog、聚合 run/diagnostic metadata、adapter pattern candidate 和 evidence，不保存 subject-level data。
+
+模式默认 `candidate/not_promoted`。Evidence 必须使用 closed aggregate fields，且逐条 `aggregate_only=true`、`independent_study=true`；自由 aggregate summary、nested records、row data 和 subject-like 内容均被拒绝。Registry 只有在恰有 approved promotion record（非空 reviewer、UTC timestamp、passed regression、至少两个 evidence IDs、至少两个 unique studies 且引用同一 pattern）时才能标记 `promoted`。案例库不得自动修改 engine；本期不建设 RAG、vector database、自动训练或自动 promotion。
 
 ## 设计结论
 
-这个 skill 的合适抽象层级是：
-- common workflow
-- common MMRM guardrails
-- analysis-type routing
-- study-specific derivation and implementation
+合适抽象层级是：
 
-也就是：在 workflow 层面保持稳定，在 analysis definition 层面保持灵活。
+```text
+approved specification + versioned typed contract
+                    ↓
+Standard MMRM Profile v1 shared engine
+                    ↑
+optional SHA-pinned study adapter
+                    ↓
+validated artifacts + lightweight case evidence
+```
 
-进一步说，这个 skill 不只是把分析分成两类，更希望把每一类逐步沉淀为一套可复用的方法模式：
-- 随机对照疗效型 MMRM：沉淀“组间比较导向”的方法框架
-- 单臂 COA/PRO 纵向型 MMRM：沉淀“组内变化导向”的方法框架
-
-这样后续遇到新 study 时，可以先判断它属于哪类分析，再沿着对应的方法框架去补 study-specific 细节，而不是每次从零组织。
+随机对照和单臂 COA/PRO 仍是分析路由，但不再要求每个 study 重写模型、诊断和 collector。新 study 优先使用标准 profile；只有无法结构化表达的转换才进入 adapter，经过跨 study 证据和 promotion gate 后才考虑成为未来固定能力。
