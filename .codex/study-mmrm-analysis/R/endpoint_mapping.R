@@ -86,6 +86,21 @@ endpoint_mapping_write_template <- function(path, tfls) {
   invisible(path)
 }
 
+# An AI agent regenerates this derived artifact from a reviewed statistical-review.md.
+# This function only serializes explicit typed rows; it never infers business rules from free text.
+endpoint_mapping_write_generated <- function(path, rows) {
+  if (!requireNamespace("yaml", quietly = TRUE)) stop("yaml package is required for endpoint mapping.")
+  mapping <- endpoint_mapping_as_frame(rows)
+  document_rows <- lapply(seq_len(nrow(mapping)), function(i) {
+    row <- as.list(mapping[i, , drop = FALSE])
+    row$selected_codes <- statistical_review_selected_codes(row$selected_codes)
+    row
+  })
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  yaml::write_yaml(list(mapping_schema_version = "1.0", rows = document_rows), path)
+  invisible(path)
+}
+
 endpoint_mapping_validate <- function(mapping, candidate_tfl_ids) {
   issues <- list()
   required <- endpoint_mapping_columns()
@@ -119,7 +134,7 @@ endpoint_mapping_find_section <- function(lines, number) which(grepl(paste0("^##
 endpoint_mapping_render_review_section <- function(lines, mapping) {
   section4 <- endpoint_mapping_find_section(lines, 4); section5 <- endpoint_mapping_find_section(lines, 5)
   if (length(section4) != 1L || length(section5) != 1L || section5 <= section4) stop("Review must contain section 4 before section 5.")
-  replacement <- c(lines[[section4]], "本节由已验证的 endpoint-mapping.yaml 自动渲染；请在 YAML 中修改业务规则。", endpoint_mapping_table_lines(mapping), "")
+  replacement <- c(lines[[section4]], "本节由已验证的 endpoint-mapping.yaml 自动渲染；AI 代理根据已审阅的 Section 3 重建该 YAML。", endpoint_mapping_table_lines(mapping), "")
   c(lines[seq_len(section4 - 1L)], replacement, lines[section5:length(lines)])
 }
 

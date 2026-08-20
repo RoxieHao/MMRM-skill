@@ -6,7 +6,8 @@ intake_candidate_rule_categories <- function() {
 }
 
 intake_candidate_table_columns <- function() {
-  c("规则类别", "AI 识别的候选规则", "证据来源与识别状态", "Standard MMRM Profile v1 评估", "统计师决定", "统计师备注或修订值")
+  if (exists("statistical_review_candidate_table_columns", mode = "function", inherits = TRUE)) return(statistical_review_candidate_table_columns())
+  c("规则类别", "AI 识别的候选规则", "证据来源与识别状态", "Standard MMRM Profile v1 评估", "统计师审阅意见", "结构化处置")
 }
 
 intake_markdown_split_row <- function(line) {
@@ -248,13 +249,12 @@ intake_candidate_rows <- function(tfl) {
         if (candidate[[9]] != "未识别") "可表达，待统计师确认" else "需要补充规则",
         if (candidate[[10]] != "未识别") "可表达，待统计师确认" else "需要补充规则"
       ),
-      "统计师决定" = rep("待确认", 10L),
-      "统计师备注或修订值" = rep("", 10L),
+      "统计师审阅意见" = rep("", 10L),
+      "结构化处置" = rep("action=pending", 10L),
       stringsAsFactors = FALSE,
       check.names = FALSE
     )
     names(rows) <- intake_candidate_table_columns()
-    rows[["统计师备注或修订值"]][[2L]] <- "必须填写 <变量> <操作符> <值>，例如 COAFL eq \"是\"；无额外限制填写 not_applicable。仅填写变量名无效。"
     return(rows)
   }
   window <- paste(tfl$window, collapse = "\n")
@@ -294,11 +294,10 @@ intake_candidate_rows <- function(tfl) {
       "需要补充规则", "需要补充规则", if (fixed != "未识别" && grepl("地区", fixed, fixed = TRUE)) "需要 Profile 扩展" else "需要补充规则",
       if (has("无结构型|type\\s*=\\s*un")) "可表达，待统计师确认" else "需要补充规则", if (has("lsmeans|校正均值")) "可表达，待统计师确认" else "需要补充规则"
     ),
-    "统计师决定" = rep("待确认", 10L),
-    "统计师备注或修订值" = rep("", 10L),
+    "统计师审阅意见" = rep("", 10L),
+    "结构化处置" = rep("action=pending", 10L),
     stringsAsFactors = FALSE, check.names = FALSE
   )
-  rows[["统计师备注或修订值"]][[2L]] <- "必须填写 <变量> <操作符> <值>，例如 COAFL eq \"是\"；无额外限制填写 not_applicable。仅填写变量名无效。"
   rows
 }
 
@@ -372,7 +371,7 @@ intake_render_review <- function(study_dir, project_dir, route, discovery) {
     "| INTAKE-001 | ALL | 当前 registered input 中未发现明确 MMRM TFL。 | 待统计师确认是否补充材料或声明不适用 | unresolved |"
   )
   metadata <- c(
-    "---", "review_schema_version: '1.0'", paste0("study_id: ", study_id), paste0("generation_route: ", route),
+    "---", "review_schema_version: '1.1'", paste0("study_id: ", study_id), paste0("generation_route: ", route),
     "review_status: pending", "reviewed_by: ''", "reviewed_at_utc: ''", "approved_execution_sha256: ''",
     paste0("source_input_file: ", manifest_relative), paste0("source_input_sha256: ", manifest_hash), "---", ""
   )
@@ -381,7 +380,7 @@ intake_render_review <- function(study_dir, project_dir, route, discovery) {
     "> 本文件是当前 study 唯一人工审阅与签核文件。AI 候选仅来自已登记的当前 study input；候选不等同于批准的执行规则。pending 状态不得填写签核信息。", "",
     "## 1. 审阅结论与签核", "当前为 pending。统计师必须处置第 3 节所有候选规则、解决全部 Issues，并完成最终 Endpoint Mapping 后方可签核。", "",
     "## 2. Study 与数据范围", paste0("Study：", study_id, "。已扫描 ", nrow(discovery$sources), " 个已登记文本材料，识别 ", length(discovery$tfls), " 个明确 MMRM TFL。"), "",
-    "## 3. Analysis 与 TFL 清单", "以下每张表均为 AI 候选规则表。统计师对每行填写采用、修改或拒绝；修改/拒绝必须给出中文备注或明确修订值。", "",
+    "## 3. Analysis 与 TFL 清单", "以下每张表均为 AI 候选规则表。统计师仅填写“统计师审阅意见”；AI 代理生成或更新“结构化处置”，并在审阅完成后重建 Endpoint Mapping。R finalizer 只校验结构化处置和生成的 mapping，不从自由文本推断统计规则。", "",
     candidate_blocks,
     "## 4. Endpoint Mapping 与分组确认",
     "| analysis_id | source_tfl_id | group_id | endpoint_label | endpoint_variable | selected_codes | selection_mode | instrument / version / reporter / subscale | row_allocation_rule | source_ref | review_status | reviewer_note |",

@@ -59,12 +59,77 @@ manifest <- data.frame(
 )
 write_utf8_bom_csv(manifest, file.path(tmp, "backup-trace", "input-manifest.csv"))
 
+dataset_row_line <- function(review_path) {
+  lines <- readLines(review_path, encoding = "UTF-8", warn = FALSE)
+  hit <- grep("^\\|\\s*\u5206\u6790\u6570\u636e\u96c6\\s*\\|", lines, value = TRUE)
+  if (!length(hit)) "" else hit[[1]]
+}
+
+# Case 1: no ADaM specification XLSX registered -> enrichment must not read datasets and must
+# leave the pending review unchanged (no dataset-name candidates injected, no sha/format).
 result <- write_intake_statistical_review(tmp, project_dir, "statistician_authored", replace_pending = FALSE)
-intake_enrich_review_with_adam(tmp, project_dir, result$review_path)
-text <- paste(readLines(result$review_path, encoding = "UTF-8", warn = FALSE), collapse = "\n")
-if (!grepl("file=adqssum.sas7bdat; format=sas7bdat", text, fixed = TRUE)) stop("Intake enrichment did not record the real SAS7BDAT binding candidate.")
-if (!grepl("no TFL-prefix, endpoint, or PARAMCD inference", text, fixed = TRUE)) stop("Intake enrichment must not infer study-specific endpoint codes.")
-if (grepl("selected codes: OVERPW; OVERTPW", text, fixed = TRUE)) stop("Intake enrichment incorrectly inferred study-specific PARAMCD values.")
+enrich_no_spec <- intake_enrich_review_with_adam(tmp, project_dir, result$review_path)
+if (isTRUE(enrich_no_spec$enriched)) stop("Intake enrichment must not enrich when no ADaM specification is registered.")
+no_spec_row <- dataset_row_line(result$review_path)
+if (grepl("sha256=", no_spec_row, fixed = TRUE) || grepl("format=", no_spec_row, fixed = TRUE)) stop("Pending analysis-dataset row must not contain sha256/format details.")
+
+# ---- ADaM specification evidence linking (deterministic, spec-only) --------
+spec_dir <- file.path(tmp, "input", "adam-spec")
+dir.create(spec_dir, recursive = TRUE, showWarnings = FALSE)
+if (requireNamespace("writexl", quietly = TRUE)) {
+  spec_path <- file.path(spec_dir, "adam-spec.xlsx")
+  spec_sheets <- list(
+    ADQSSUM = data.frame(A = c("Dataset", "\u75bc\u75db\u5f3a\u5ea6 pain intensity summary", "PARAMCD", "AVISITN", "CHG", "BASE"), stringsAsFactors = FALSE),
+    QSSUMPARAM = data.frame(A = c("PARAMCD", "OVERPW", "OVERTPW"), B = c("PARAM", "\u75bc\u75db\u5f3a\u5ea6", "\u75bc\u75db\u5f3a\u5ea6"), stringsAsFactors = FALSE)
+  )
+  writexl::write_xlsx(spec_sheets, spec_path)
+  spec_result <- write_intake_statistical_review(tmp, project_dir, "statistician_authored", replace_pending = TRUE)
+  intake_enrich_review_with_adam(tmp, project_dir, spec_result$review_path)
+  spec_text <- paste(readLines(spec_result$review_path, encoding = "UTF-8", warn = FALSE), collapse = "\n")
+  spec_row <- dataset_row_line(spec_result$review_path)
+  # Candidate must present the logical dataset name (ADQSSUM), sourced from ADaM specification.
+  if (!grepl("\u5019\u9009\u5206\u6790\u6570\u636e\u96c6", spec_row, fixed = TRUE)) stop("Enriched analysis-dataset row must present candidate dataset name(s).")
+  if (!grepl("ADQSSUM", spec_row, fixed = TRUE)) stop("Enrichment did not surface the ADaM specification dataset ADQSSUM as a candidate.")
+  if (!grepl("ADaM specification sheet=", spec_row, fixed = TRUE)) stop("Enrichment did not attach ADaM specification sheet/row evidence.")
+  # Pending review must NOT carry sha256/format/relative_path binding details.
+  if (grepl("sha256=", spec_row, fixed = TRUE) || grepl("format=", spec_row, fixed = TRUE) || grepl("relative_path=", spec_row, fixed = TRUE)) {
+    stop("Pending analysis-dataset candidate must only name the dataset, not sha256/format/relative_path.")
+  }
+  review_after_spec <- read_statistical_review(spec_result$review_path)
+  if (!identical(as.character(review_after_spec$metadata$review_status), "pending")) stop("Intake enrichment must keep the review pending; it must not auto-approve.")
+
+  # ---- Candidate listing invariants (spec-only, no scoring/ranking, no SAS7BDAT) -----
+  spec_evidence <- runtime_dataset_spec_evidence(tmp, project_dir)
+  if (!nrow(spec_evidence)) stop("Expected ADaM specification evidence to be extracted for listing checks.")
+
+  # Add a second dataset sheet to exercise multi-candidate stable ordering.
+  spec_dir2 <- file.path(tmp, "input", "adam-spec2")
+  dir.create(spec_dir2, recursive = TRUE, showWarnings = FALSE)
+  spec_path2 <- file.path(spec_dir2, "adam-spec.xlsx")
+  spec_sheets2 <- list(
+    ADQSSUM = data.frame(A = c("Dataset", "\u75bc\u75db\u5f3a\u5ea6 pain intensity summary", "PARAMCD", "AVISITN", "CHG", "BASE"), stringsAsFactors = FALSE),
+    QSSUMPARAM = data.frame(A = c("PARAMCD", "OVERPW"), B = c("PARAM", "\u75bc\u75db\u5f3a\u5ea6"), stringsAsFactors = FALSE),
+    ADSL = data.frame(A = c("Dataset", "subject level", "USUBJID", "TRT01P", "AGE"), stringsAsFactors = FALSE)
+  )
+  writexl::write_xlsx(spec_sheets2, spec_path2)
+  intake_sync_input_manifest(tmp, project_dir)
+  ev2 <- runtime_dataset_spec_evidence(tmp, project_dir)
+
+  # Determinism: identical inputs must yield identical candidate names and order.
+  l1 <- runtime_dataset_spec_list_datasets(ev2)
+  l2 <- runtime_dataset_spec_list_datasets(ev2)
+  names1 <- vapply(l1$candidates, function(x) x$name, character(1))
+  names2 <- vapply(l2$candidates, function(x) x$name, character(1))
+  if (!identical(names1, names2)) stop("Candidate listing must be identical on repeated runs.")
+  # No scoring/ranking: candidates are simply all dataset sheets ordered by (upper-cased) name.
+  if (!identical(names1, names1[order(toupper(names1), method = "radix")])) stop("Candidates must be stably ordered by dataset name.")
+  if (!all(c("ADQSSUM", "ADSL") %in% names1)) stop("Candidate listing must include every ADaM specification dataset sheet.")
+  # Every candidate must carry traceable spec sheet/row evidence.
+  if (!all(vapply(l1$candidates, function(x) nzchar(x$sheet_ref), logical(1)))) stop("Each candidate must attach ADaM specification sheet/row evidence.")
+
+  # Spec-only guarantee: listing path must not read SAS7BDAT.
+  if (any(grepl("read_sas", deparse(runtime_dataset_spec_list_datasets)))) stop("Candidate listing must not read SAS7BDAT.")
+}
 invisible(gc())
 unlink(tmp, recursive = TRUE, force = TRUE)
 if (dir.exists(tmp)) stop("Intake enrichment temporary cleanup failed: ", tmp)

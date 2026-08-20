@@ -19,7 +19,7 @@
 
 每个 mapping、filter、model term、derivation、estimand 和 output rule 必须有 source 或人工确认。preferred sources：SAP、shell/footnote/program note、ADaM spec/define、production program、统计师/用户确认。
 
-AI/作者候选只能进入同一份 pending `statistical-review.md` 的第 3 节逐 TFL 候选规则表。每个明确 MMRM TFL 都必须有十条固定规则：分析数据集、分析人群、终点变量与取值、终点维度、响应与基线、访视与窗口、重复记录与行分配、固定效应、协方差与自由度、估计量与输出。每行均须保留当前 study source reference 和识别状态；未确认规则必须明确标为未识别或候选，不能进入 primary filter/formula/output。统计师逐行采用、修改或拒绝；approved review 中不得有待确认，修改/拒绝必须有备注。approved code 中每个非机械选择必须能回到 specification execution section、单一审阅文件的 source reference 和已批准的 endpoint mapping。UTF-8 BOM、对象名和日志路径等可标为 implementation choice，统计规则不能。
+AI/作者候选只能进入同一份 pending `statistical-review.md` 的第 3 节逐 TFL 候选规则表。每个明确 MMRM TFL 都必须有十条固定规则：分析数据集、分析人群、终点变量与取值、终点维度、响应与基线、访视与窗口、重复记录与行分配、固定效应、协方差与自由度、估计量与输出。R intake 扫描只提供可复核事实证据（例如候选 dataset、变量、PARAM/PARAMCD、访视、flag、缺失、重复和计数），不自动等价于统计规则。AI 必须在既有“AI 识别的候选规则”列基于已登记的 current-study source 与 R 证据进行综合判断：比较候选、解释 source-to-data 映射，并说明限制、冲突或待确认点；不得只复制扫描结果。每行均须保留当前 study source reference 和识别状态；未确认规则必须明确标为未识别或候选，不能进入 primary filter/formula/output。不得把无依据推断写成已确认或可执行规则；证据不足时必须写明缺失证据和需统计师决定的问题。统计师逐行采用、修改或拒绝；approved review 中不得有待确认，修改/拒绝必须有备注。approved code 中每个非机械选择必须能回到 specification execution section、单一审阅文件的 source reference 和已批准的 endpoint mapping。UTF-8 BOM、对象名和日志路径等可标为 implementation choice，统计规则不能。
 
 ## ADaM Dataset Selection
 

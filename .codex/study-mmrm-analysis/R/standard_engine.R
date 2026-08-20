@@ -541,7 +541,10 @@ standard_write_report <- function(path, analysis, diagnostics, status, risk, spe
   writeLines(lines, path, useBytes = TRUE)
 }
 
-run_standard_mmrm_analysis <- function(script_file, analysis_id, pinned_specification_sha256) {
+run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_specification_sha256,
+                                             stage, exchange_path, marker_path,
+                                             run_id, invocation_id) {
+  stage <- match.arg(stage, c("prepare", "fit"))
   project_dir <- find_project_dir(script_file)
   helper_dir <- file.path(project_dir, ".codex", "study-mmrm-analysis", "R")
   source(file.path(helper_dir, "study_paths.R"), encoding = "UTF-8", local = environment())
@@ -576,32 +579,79 @@ run_standard_mmrm_analysis <- function(script_file, analysis_id, pinned_specific
   contract_sha <- preflight$contract_sha
   analysis <- preflight$analysis
   output_paths <- analysis_output_paths(paths, analysis_id)
-  invisible(lapply(output_paths[c("root", "tables", "figures", "listings", "models", "diagnostics", "logs")], dir.create, recursive = TRUE, showWarnings = FALSE))
-  writeLines(character(), output_paths$log_file, useBytes = TRUE)
-  log_line <- function(...) cat(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " | ", paste0(..., collapse = ""), "\n", file = output_paths$log_file, append = TRUE, sep = "")
-  run_id <- paste0(format(Sys.time(), "%Y%m%d-%H%M%S"), "-", analysis_id, "-", Sys.getpid())
-  invocation_arg <- grep("^--collector-invocation-id=", commandArgs(trailingOnly = TRUE), value = TRUE)
-  invocation_id <- if (length(invocation_arg) == 1L) sub("^--collector-invocation-id=", "", invocation_arg) else paste0("standalone-", run_id)
+  if (identical(stage, "fit")) {
+    invisible(lapply(output_paths[c("root", "tables", "figures", "listings", "models", "diagnostics", "logs")], dir.create, recursive = TRUE, showWarnings = FALSE))
+    writeLines(character(), output_paths$log_file, useBytes = TRUE)
+  }
+  log_line <- function(...) {
+    if (identical(stage, "fit")) {
+      cat(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " | ", paste0(..., collapse = ""), "\n", file = output_paths$log_file, append = TRUE, sep = "")
+    }
+  }
   raw_path <- file.path(output_paths$tables, analysis$output$raw_file)
   final_path <- file.path(output_paths$tables, analysis$output$final_file)
   failure_domain <- "environment"
   failure_phase <- "runtime_package_gate"
   prepared_data <- NULL
+  publish_exchange <- function(exchange) {
+    temporary_exchange <- paste0(exchange_path, ".tmp-", Sys.getpid())
+    on.exit(unlink(temporary_exchange, force = TRUE), add = TRUE)
+    saveRDS(exchange, temporary_exchange, version = 3)
+    if (file.exists(exchange_path) && !unlink(exchange_path, force = TRUE)) stop("Cannot replace stale MMRM stage exchange: ", exchange_path)
+    if (!file.rename(temporary_exchange, exchange_path)) stop("Cannot atomically publish MMRM stage exchange: ", exchange_path)
+    writeLines("complete", marker_path, useBytes = TRUE)
+    invisible(exchange_path)
+  }
 
   outcome <- tryCatch({
-    if (!requireNamespace("callr", quietly = TRUE) || !requireNamespace("mmrm", quietly = TRUE) || !requireNamespace("emmeans", quietly = TRUE)) {
-      stop("callr, mmrm, and emmeans packages are required.")
+    if (identical(stage, "fit") && !requireNamespace("callr", quietly = TRUE)) {
+      stop("callr package is required to run isolated MMRM workers.")
     }
-    failure_domain <- "adapter"
-    failure_phase <- "approved_adapter_gate"
-    standard_load_adapter(project_dir, analysis$adapter_file, analysis$adapter_sha256)
+    if (identical(stage, "prepare")) {
+      failure_domain <- "adapter"
+      failure_phase <- "approved_adapter_gate"
+      standard_load_adapter(project_dir, analysis$adapter_file, analysis$adapter_sha256)
+      failure_domain <- "data"
+      failure_phase <- "linked_source_gate"
+      raw_data <- read_linked_source_data(project_dir, file.path(paths$backup_trace_dir, "input-manifest.csv"), analysis$dataset)
+      failure_phase <- "data_preparation_qc"
+      prepared <- standard_prepare_analysis_data(raw_data, analysis, project_dir)
+      prepared_data <<- prepared
+
+      exchange <- list(
+        schema_version = "1.0",
+        analysis_id = analysis_id,
+        specification_sha256 = toupper(spec$sha256),
+        contract_sha256 = toupper(contract_sha),
+        run_id = run_id,
+        invocation_id = invocation_id,
+        prepared = prepared
+      )
+      publish_exchange(exchange)
+      return(invisible(list(stage = "prepare", rows = nrow(prepared))))
+    }
+
     failure_domain <- "data"
-    failure_phase <- "linked_source_gate"
-    raw_data <- read_linked_source_data(project_dir, file.path(paths$backup_trace_dir, "input-manifest.csv"), analysis$dataset)
-    failure_phase <- "data_preparation_qc"
-    prepared <- standard_prepare_analysis_data(raw_data, analysis, project_dir)
+    failure_phase <- "prepared_exchange_gate"
+    if (!file.exists(marker_path) || !file.exists(exchange_path)) stop("Prepared MMRM stage exchange is incomplete.")
+    exchange <- readRDS(exchange_path)
+    required_exchange <- c("schema_version", "analysis_id", "specification_sha256", "contract_sha256", "run_id", "invocation_id", "prepared")
+    if (!is.list(exchange) || any(!required_exchange %in% names(exchange))) stop("Prepared MMRM stage exchange schema is invalid.")
+    if (!identical(exchange$schema_version, "1.0")) stop("Prepared MMRM stage exchange version is unsupported.")
+    identity_ok <- identical(exchange$analysis_id, analysis_id) &&
+      identical(toupper(exchange$specification_sha256), toupper(spec$sha256)) &&
+      identical(toupper(exchange$contract_sha256), toupper(contract_sha)) &&
+      identical(exchange$run_id, run_id) && identical(exchange$invocation_id, invocation_id)
+    if (!identity_ok) stop("Prepared MMRM stage exchange identity does not match this run.")
+    if (!is.null(exchange$prepare_error)) {
+      failure_domain <- as.character(exchange$prepare_error$domain)
+      failure_phase <- as.character(exchange$prepare_error$phase)
+      stop(as.character(exchange$prepare_error$message))
+    }
+    prepared <- exchange$prepared
+    if (!is.data.frame(prepared)) stop("Prepared MMRM stage exchange does not contain a data.frame.")
     prepared_data <<- prepared
-    log_line("data preparation completed; rows=", nrow(prepared), ".")
+    log_line("data preparation completed in isolated top-level stage; rows=", nrow(prepared), ".")
 
     failure_domain <- "contract"
     failure_phase <- "model_destination_gate"
@@ -677,6 +727,20 @@ run_standard_mmrm_analysis <- function(script_file, analysis_id, pinned_specific
     log_line("diagnostics collapsed; status=", run_status, "; risk=", risk, ".")
     list(raw = raw_result, final = standard_build_shell_like_final(raw_result, prepared, analysis, run_status), diagnostics = diagnostics, status = run_status, risk = risk)
   }, error = function(e) {
+    if (identical(stage, "prepare")) {
+      exchange <- list(
+        schema_version = "1.0",
+        analysis_id = analysis_id,
+        specification_sha256 = toupper(spec$sha256),
+        contract_sha256 = toupper(contract_sha),
+        run_id = run_id,
+        invocation_id = invocation_id,
+        prepared = NULL,
+        prepare_error = list(domain = failure_domain, phase = failure_phase, message = conditionMessage(e))
+      )
+      publish_exchange(exchange)
+      return(invisible(list(stage = "prepare", error = conditionMessage(e))))
+    }
     if (grepl("ENDPOINT_MAPPING:", conditionMessage(e), fixed = TRUE)) {
       failure_domain <- "data_mapping"
       failure_phase <- "endpoint_allocation_gate"
@@ -697,6 +761,8 @@ run_standard_mmrm_analysis <- function(script_file, analysis_id, pinned_specific
     )
     list(raw = standard_raw_result_schema(), final = standard_build_shell_like_final(standard_raw_result_schema(), prepared_data, analysis, status), diagnostics = diagnostics, status = status, risk = risk)
   })
+
+  if (identical(stage, "prepare")) return(invisible(outcome))
 
   log_line("writing analysis artifacts.")
   write_utf8_bom_csv(outcome$raw, raw_path)
@@ -723,4 +789,82 @@ run_standard_mmrm_analysis <- function(script_file, analysis_id, pinned_specific
   log_line("run finished; status=", outcome$status, "; risk=", outcome$risk, ".")
   if (outcome$status %in% standard_terminal_failure_status()) stop("Standard MMRM analysis \u7ec8\u6b62\u5931\u8d25\uff1astatus=", outcome$status)
   invisible(outcome)
+}
+
+
+standard_shell_quote_windows <- function(value) {
+  paste0('"', gsub('"', '""', as.character(value), fixed = TRUE), '"')
+}
+
+standard_write_stage_launcher <- function(path, rscript, runner, stage_arguments) {
+  prepare_arguments <- c("--stage=prepare", stage_arguments)
+  fit_arguments <- c("--stage=fit", stage_arguments)
+  if (.Platform$OS.type == "windows") {
+    quote_windows <- function(values) vapply(values, standard_shell_quote_windows, character(1))
+    prepare_command <- paste(c(standard_shell_quote_windows(rscript), "--vanilla", standard_shell_quote_windows(runner), quote_windows(prepare_arguments)), collapse = " ")
+    fit_command <- paste(c(standard_shell_quote_windows(rscript), "--vanilla", standard_shell_quote_windows(runner), quote_windows(fit_arguments)), collapse = " ")
+    writeLines(c(
+      "@echo off",
+      "setlocal",
+      prepare_command,
+      "if errorlevel 1 exit /b %errorlevel%",
+      fit_command,
+      "exit /b %errorlevel%"
+    ), path, useBytes = TRUE)
+  } else {
+    quote_sh <- function(values) vapply(values, shQuote, character(1))
+    prepare_command <- paste(c(shQuote(rscript), "--vanilla", shQuote(runner), quote_sh(prepare_arguments)), collapse = " ")
+    fit_command <- paste(c(shQuote(rscript), "--vanilla", shQuote(runner), quote_sh(fit_arguments)), collapse = " ")
+    writeLines(c("#!/bin/sh", "set -e", prepare_command, fit_command), path, useBytes = TRUE)
+  }
+  invisible(path)
+}
+
+run_standard_mmrm_analysis <- function(script_file, analysis_id, pinned_specification_sha256) {
+  project_dir <- find_project_dir(script_file)
+  runner <- file.path(project_dir, ".codex", "study-mmrm-analysis", "scripts", "run_standard_mmrm_stage.R")
+  if (!file.exists(runner)) stop("Standard MMRM stage runner is missing: ", runner)
+
+  rscript_name <- if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript"
+  rscript <- file.path(R.home("bin"), rscript_name)
+  if (!file.exists(rscript)) stop("Cannot locate current Rscript: ", rscript)
+
+  run_id <- paste0(format(Sys.time(), "%Y%m%d-%H%M%S"), "-", analysis_id, "-", Sys.getpid())
+  invocation_arg <- grep("^--collector-invocation-id=", commandArgs(trailingOnly = TRUE), value = TRUE)
+  invocation_id <- if (length(invocation_arg) == 1L) sub("^--collector-invocation-id=", "", invocation_arg) else paste0("standalone-", run_id)
+
+  exchange_dir <- tempfile(paste0("mmrm-stage-", analysis_id, "-"))
+  if (!dir.create(exchange_dir, recursive = TRUE, showWarnings = FALSE)) stop("Cannot create MMRM stage exchange directory: ", exchange_dir)
+  on.exit(unlink(exchange_dir, recursive = TRUE, force = TRUE), add = TRUE)
+  exchange_path <- file.path(exchange_dir, "prepared.rds")
+  marker_path <- file.path(exchange_dir, "prepared.complete")
+  launcher_extension <- if (.Platform$OS.type == "windows") ".cmd" else ".sh"
+  launcher_path <- file.path(exchange_dir, paste0("run-stages", launcher_extension))
+
+  stage_arguments <- c(
+    paste0("--script-file=", normalizePath(script_file, winslash = "/", mustWork = TRUE)),
+    paste0("--analysis-id=", analysis_id),
+    paste0("--specification-sha256=", pinned_specification_sha256),
+    paste0("--exchange=", normalizePath(exchange_path, winslash = "/", mustWork = FALSE)),
+    paste0("--marker=", normalizePath(marker_path, winslash = "/", mustWork = FALSE)),
+    paste0("--run-id=", run_id),
+    paste0("--invocation-id=", invocation_id)
+  )
+  standard_write_stage_launcher(launcher_path, normalizePath(rscript, winslash = "/", mustWork = TRUE), normalizePath(runner, winslash = "/", mustWork = TRUE), stage_arguments)
+
+  status <- tryCatch({
+    if (.Platform$OS.type == "windows") {
+      comspec <- Sys.getenv("COMSPEC", unset = "cmd.exe")
+      suppressWarnings(system2(comspec, c("/d", "/s", "/c", shQuote(launcher_path)), wait = TRUE))
+    } else {
+      suppressWarnings(system2("/bin/sh", shQuote(launcher_path), wait = TRUE))
+    }
+  }, error = function(e) structure(1L, stage_error = conditionMessage(e)))
+  stage_error <- attr(status, "stage_error")
+  status <- as.integer(status)
+  if (!identical(status, 0L)) {
+    detail <- if (is.null(stage_error)) "see stage output above" else stage_error
+    stop("Standard MMRM top-level stage launcher failed (exit=", status, "): ", detail)
+  }
+  invisible(TRUE)
 }

@@ -45,7 +45,7 @@ Initializer 建立 `input/`、最小 control/code 骨架和可选 Markdown brief
 
 ### `statistical-review.md`
 
-每 study 只允许一份面向统计师的人工审阅文件，适用于 `statistician_authored` 和 `ai_source_extraction`。它必须有固定 YAML front matter、八个固定中文章节、第 3 节中每个明确 MMRM TFL 的独立十行候选规则表、唯一的 Endpoint Mapping 表和唯一的 Issues 表。候选表要求统计师逐行处置数据集、人群、终点/维度、response/baseline、visit/window、重复/行分配、固定效应、协方差/自由度和 estimand/output；approved review 不得有待确认，修改/拒绝必须保留备注。pending 文件可由 AI/作者填入候选内容，但不得填写 reviewer、UTC 时间或 approved execution SHA-256，也不得改为 approved。
+每 study 只允许一份面向统计师的人工审阅文件，适用于 `statistician_authored` 和 `ai_source_extraction`。它必须有固定 YAML front matter、八个固定中文章节、第 3 节中每个明确 MMRM TFL 的独立十行候选规则表、唯一的 Endpoint Mapping 表和唯一的 Issues 表。候选表要求统计师逐行处置数据集、人群、终点/维度、response/baseline、visit/window、重复/行分配、固定效应、协方差/自由度和 estimand/output；approved review 不得有待确认，修改/拒绝必须保留备注。既有“AI 识别的候选规则”列必须是 AI 对已登记 current-study source 与 R intake 扫描证据的分析性候选，而非对 dataset schema、变量列表或扫描计数的直接渲染：AI 应比较候选、说明 source-to-data 映射及限制或待确认点；R 扫描继续只提供可复核事实证据。表头、source reference、识别状态和统计师处置结构不变；候选文本不是机器解析来源、runtime input 或批准字段。pending 文件可由 AI/作者填入候选内容，但不得填写 reviewer、UTC 时间或 approved execution SHA-256，也不得改为 approved。
 
 统计师在同一文件确认或修改 mapping、模型和行分配规则后，填写 `review_status: approved`、`reviewed_by`、`reviewed_at_utc` 和 approved execution SHA-256。每个 mapping 行必须具有 source reference 和 `accepted/modified` 状态；Issues 必须全部 `resolved`。候选/正式 Excel workbook 不是 approval artifact、runtime input 或必需输出。
 

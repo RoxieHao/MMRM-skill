@@ -253,7 +253,34 @@ parse_statistical_review_table <- function(section_lines, expected_columns, sect
 }
 
 statistical_review_candidate_table_columns <- function() {
-  c("规则类别", "AI 识别的候选规则", "证据来源与识别状态", "Standard MMRM Profile v1 评估", "统计师决定", "统计师备注或修订值")
+  c("规则类别", "AI 识别的候选规则", "证据来源与识别状态", "Standard MMRM Profile v1 评估", "统计师审阅意见", "结构化处置")
+}
+
+# An AI agent writes this controlled field after interpreting the human-readable opinion.
+# R only parses and validates this field; it never infers meaning from the opinion.
+statistical_review_parse_disposition <- function(value) {
+  text <- trimws(as.character(value))
+  if (!nzchar(text)) stop("结构化处置不得为空；请由 AI 代理写入 action=pending 或明确处置。")
+  parts <- trimws(strsplit(text, ";", fixed = TRUE)[[1L]])
+  if (any(!nzchar(parts))) stop("结构化处置不得包含空字段。")
+  fields <- lapply(parts, function(part) {
+    match <- regmatches(part, regexec("^([a-z_]+)=(.+)$", part, perl = TRUE))[[1L]]
+    if (length(match) != 3L) stop("结构化处置必须使用 key=value；收到：", part)
+    c(key = match[[2L]], value = trimws(match[[3L]]))
+  })
+  keys <- vapply(fields, `[[`, character(1), "key")
+  values <- vapply(fields, `[[`, character(1), "value")
+  allowed <- c("action", "rule", "dataset", "population_rule")
+  if (any(!keys %in% allowed) || anyDuplicated(keys) || !"action" %in% keys || any(!nzchar(values))) {
+    stop("结构化处置必须包含唯一 action，且只允许 action、rule、dataset、population_rule。")
+  }
+  action <- values[[match("action", keys)]]
+  if (!action %in% c("pending", "approved", "modified", "needs_clarification")) {
+    stop("结构化处置 action 只允许 pending、approved、modified 或 needs_clarification。")
+  }
+  result <- as.list(setNames(values, keys))
+  result$action <- action
+  result
 }
 
 statistical_review_candidate_rule_categories <- function() {
@@ -343,24 +370,20 @@ validate_statistical_review_candidate_tables <- function(review) {
       if (nrow(table) != length(categories) || !identical(as.character(table[["规则类别"]]), categories)) {
         stop("候选 TFL 表 ", candidate$tfl_id, " 必须恰有十条固定规则类别，且顺序不得改变。")
       }
-      required <- c("AI 识别的候选规则", "证据来源与识别状态", "Standard MMRM Profile v1 评估", "统计师决定")
+      required <- c("AI 识别的候选规则", "证据来源与识别状态", "Standard MMRM Profile v1 评估", "结构化处置")
       if (!all(vapply(required, function(name) all(nzchar(trimws(as.character(table[[name]])))), logical(1)))) {
-        stop("候选 TFL 表 ", candidate$tfl_id, " 的候选、证据、Profile 评估和统计师决定不得为空。")
+        stop("候选 TFL 表 ", candidate$tfl_id, " 的候选、证据、Profile 评估和结构化处置不得为空。")
       }
       assessment <- trimws(as.character(table[["Standard MMRM Profile v1 评估"]]))
-      decision <- trimws(as.character(table[["统计师决定"]]))
-      notes <- trimws(as.character(table[["统计师备注或修订值"]]))
+      dispositions <- lapply(table[["结构化处置"]], statistical_review_parse_disposition)
+      actions <- vapply(dispositions, `[[`, character(1), "action")
       if (any(!assessment %in% profile_assessments)) stop("候选 TFL 表 ", candidate$tfl_id, " 存在无效 Profile 评估。")
-      if (any(!decision %in% decisions)) stop("候选 TFL 表 ", candidate$tfl_id, " 存在无效统计师决定。")
-      if (identical(as.character(review$metadata$review_status), "approved") && any(decision == "待确认")) {
-        stop("approved review 不得保留待确认的候选规则。")
-      }
-      if (any(decision %in% c("修改", "拒绝") & !nzchar(notes))) {
-        stop("候选 TFL 表 ", candidate$tfl_id, " 的修改或拒绝必须填写统计师备注或修订值。")
+      if (identical(as.character(review$metadata$review_status), "approved") && any(!actions %in% c("approved", "modified"))) {
+        stop("approved review 不得保留 pending 或 needs_clarification 的结构化处置。")
       }
       if (!identical(as.character(review$metadata$review_status), "pending")) {
-        population_value <- table[["AI 识别的候选规则"]][[match("分析人群", table[["规则类别"]])]]
-        statistical_review_parse_population_rule(population_value)
+        population <- dispositions[[match("分析人群", table[["规则类别"]])]]
+        if (!is.null(population$population_rule)) statistical_review_parse_population_rule(population$population_rule)
       }
     }
     result$valid <- TRUE
@@ -396,7 +419,7 @@ validate_statistical_review <- function(review, spec) {
     execution_hash <- toupper(trimws(as.character(metadata$approved_execution_sha256)))
     source_hash <- toupper(trimws(as.character(metadata$source_input_sha256)))
     result$metadata_valid <- has_metadata &&
-      identical(as.character(metadata$review_schema_version), "1.0") &&
+      identical(as.character(metadata$review_schema_version), "1.1") &&
       identical(as.character(metadata$review_status), "approved") &&
       identical(as.character(metadata$finalization_status), "ready_for_final_signature") &&
       nzchar(reviewer) && statistical_review_iso_utc(reviewed_at) &&

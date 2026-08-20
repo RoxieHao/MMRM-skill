@@ -65,7 +65,7 @@ analysis_specification_candidate_summary <- function(candidates) {
       fixed_effects = table[["AI 识别的候选规则"]][[8]],
       covariance_df = table[["AI 识别的候选规则"]][[9]],
       estimand_output = table[["AI 识别的候选规则"]][[10]],
-      statistician_decision = paste(unique(trimws(as.character(table[["统计师决定"]]))), collapse = "; "),
+      disposition_actions = paste(unique(vapply(table[["结构化处置"]], function(value) statistical_review_parse_disposition(value)$action, character(1))), collapse = "; "),
       stringsAsFactors = FALSE,
       check.names = FALSE
     )

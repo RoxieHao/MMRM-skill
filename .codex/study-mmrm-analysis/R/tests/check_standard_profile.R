@@ -271,7 +271,6 @@ write_specification <- function(path, values) {
 write_specification(spec_path, metadata)
 review_path <- file.path(study_dir, "statistician-review", "statistical-review.md")
 candidate_table_lines <- function(review_status) {
-  decision <- if (identical(review_status, "approved")) "采用" else "待确认"
   categories <- statistical_review_candidate_rule_categories()
   c(
     paste0("### 表 ", tfl_id, "：合成评分 MMRM 汇总"),
@@ -280,13 +279,15 @@ candidate_table_lines <- function(review_status) {
     "|---|---|---|---|---|---|",
     vapply(categories, function(category) {
       candidate <- if (identical(category, "分析人群")) "RECORD_USE eq \"INCLUDE\"" else "合成候选规则"
-      paste0("| ", category, " | ", candidate, " | 合成测试来源；已识别 | 可表达，待统计师确认 | ", decision, " | ", if (identical(decision, "待确认")) "待统计师处置" else "", " |")
+      opinion <- if (identical(review_status, "approved")) "确认" else ""
+      disposition <- if (!identical(review_status, "approved")) "action=pending" else if (identical(category, "分析人群")) "action=modified;rule=RECORD_USE eq \"INCLUDE\";population_rule=RECORD_USE eq \"INCLUDE\"" else "action=approved;rule=合成候选规则"
+      paste0("| ", category, " | ", candidate, " | 合成测试来源；已识别 | 可表达，待统计师确认 | ", opinion, " | ", disposition, " |")
     }, character(1))
   )
 }
 write_statistical_review <- function(path, execution_sha256, review_status = "approved") {
   review_metadata <- list(
-    review_schema_version = "1.0", study_id = study_name, generation_route = "statistician_authored",
+    review_schema_version = "1.1", study_id = study_name, generation_route = "statistician_authored",
     review_status = review_status,
     finalization_status = if (identical(review_status, "approved")) "ready_for_final_signature" else "",
     reviewed_by = if (identical(review_status, "approved")) "Synthetic Statistician" else "",
@@ -319,7 +320,7 @@ write_specification(spec_path, metadata)
 valid_review <- validate_statistical_review(read_statistical_review(review_path), read_analysis_specification(spec_path))
 stopifnot(valid_review$metadata_valid, valid_review$sections_valid, valid_review$candidate_tables_valid, valid_review$mapping_valid, valid_review$issues_valid, valid_review$identity_valid, valid_review$execution_match)
 invalid_candidate_lines <- readLines(review_path, warn = FALSE, encoding = "UTF-8")
-invalid_candidate_lines <- sub("\\| 分析数据集 \\| 合成候选规则 \\| 合成测试来源；已识别 \\| 可表达，待统计师确认 \\| 采用 \\|  \\|", "| 分析数据集 | 合成候选规则 | 合成测试来源；已识别 | 可表达，待统计师确认 | 拒绝 |  |", invalid_candidate_lines)
+invalid_candidate_lines <- sub("action=approved;rule=合成候选规则", "action=pending", invalid_candidate_lines, fixed = TRUE)
 writeLines(invalid_candidate_lines, review_path, useBytes = TRUE)
 invalid_candidate <- validate_statistical_review(read_statistical_review(review_path), read_analysis_specification(spec_path))
 stopifnot(!invalid_candidate$candidate_tables_valid)
@@ -404,7 +405,7 @@ stopifnot(
   identical(as.character(intake_review$metadata$review_status), "pending"), length(intake_tables) == 1L,
   identical(intake_tables[[1]]$tfl_id, "1.2.3"),
   identical(as.character(intake_tables[[1]]$table[["规则类别"]]), statistical_review_candidate_rule_categories()),
-  all(intake_tables[[1]]$table[["统计师决定"]] == "待确认")
+  all(intake_tables[[1]]$table[["结构化处置"]] == "action=pending")
 )
 writeLines(sub("review_status: pending", "review_status: approved", readLines(intake_review_path, warn = FALSE, encoding = "UTF-8"), fixed = TRUE), intake_review_path, useBytes = TRUE)
 approved_intake_overwrite <- run_script(intake_generator, c(shQuote(paste0("--study-dir=", intake_study_dir)), "--route=ai_source_extraction", "--replace-pending=true"), allow_nonzero = TRUE)
@@ -785,14 +786,15 @@ dual_candidate_lines <- unlist(lapply(dual_tfl_ids, function(id) c(
   "|---|---|---|---|---|---|",
   vapply(statistical_review_candidate_rule_categories(), function(category) {
     candidate <- if (identical(category, "分析人群")) "RECORD_USE eq \"INCLUDE\"" else "合成候选规则"
-    paste0("| ", category, " | ", candidate, " | 合成测试来源；已识别 | 可表达，待统计师确认 | 采用 |  |")
+    disposition <- if (identical(category, "分析人群")) "action=modified;rule=RECORD_USE eq \"INCLUDE\";population_rule=RECORD_USE eq \"INCLUDE\"" else "action=approved;rule=合成候选规则"
+    paste0("| ", category, " | ", candidate, " | 合成测试来源；已识别 | 可表达，待统计师确认 | 确认 | ", disposition, " |")
   }, character(1))
 )), use.names = FALSE)
 dual_mapping_lines <- vapply(seq_along(dual_analysis_ids), function(i) paste0(
   "| ", dual_analysis_ids[[i]], " | ", dual_tfl_ids[[i]], " | SCOREX-GROUP | 合成评分 | MEASURE_KEY | SCOREX | single_code | not_applicable | one_row_per_subject_endpoint_visit | ", dual_tfl_ids[[i]], " | accepted | 已确认 |"
 ), character(1))
 dual_review_metadata <- list(
-  review_schema_version = "1.0", study_id = dual_study_name, generation_route = "statistician_authored",
+  review_schema_version = "1.1", study_id = dual_study_name, generation_route = "statistician_authored",
   review_status = "approved", finalization_status = "ready_for_final_signature", reviewed_by = "Synthetic Statistician",
   reviewed_at_utc = "2026-08-14T12:00:00Z", approved_execution_sha256 = toupper(dual_execution_sha256),
   source_input_file = gsub("\\\\", "/", dual_contract_relative), source_input_sha256 = toupper(dual_contract_hash)

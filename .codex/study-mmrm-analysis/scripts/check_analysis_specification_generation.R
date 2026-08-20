@@ -81,7 +81,7 @@ endpoint_mapping_hash <- toupper(specification_sha256(endpoint_mapping_path))
 
 write_review <- function(review_status, execution_sha = "") {
   metadata <- list(
-    review_schema_version = "1.0",
+    review_schema_version = "1.1",
     study_id = study_name,
     generation_route = "statistician_authored",
     review_status = review_status,
@@ -98,7 +98,8 @@ write_review <- function(review_status, execution_sha = "") {
   columns <- statistical_review_candidate_table_columns()
   rows <- vapply(statistical_review_candidate_rule_categories(), function(category) {
     candidate <- if (identical(category, statistical_review_candidate_rule_categories()[[1]])) dataset_binding_text else if (identical(category, statistical_review_candidate_rule_categories()[[2]])) "not_applicable" else "ADQS PARAMCD SCOREX CHG BASE AVISITN UN LSMean"
-    paste0("| ", category, " | ", candidate, " | source; identified | ", profile_ok, " | ", adopt, " | approved |")
+    disposition <- if (identical(category, statistical_review_candidate_rule_categories()[[2]])) "action=modified;rule=not_applicable;population_rule=not_applicable" else "action=approved;rule=approved"
+    paste0("| ", category, " | ", candidate, " | source; identified | ", profile_ok, " | ", adopt, " | ", disposition, " |")
   }, character(1))
   body <- c(
     headings[[1]], "approved after finalization gate",

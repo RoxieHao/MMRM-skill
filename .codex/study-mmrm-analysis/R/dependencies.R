@@ -1,6 +1,10 @@
 # Skill 依赖声明与检查/安装。
-# 在 skill 的入口处调用 ensure_skill_packages()：检查全部运行期所需 R package，
+# 在 skill 的入口处调用 ensure_skill_packages()：通过安装元数据检查全部运行期所需 R package，
 # 缺失则自动安装（可用环境变量 MMRM_SKILL_NO_INSTALL=1 关闭自动安装，仅报错）。
+#
+# 不在这里批量加载 package namespace。R 4.6.0 的本地混版 package 库可能在
+# haven/vctrs 与 mmrm/Matrix 先后加载或顺序创建健康检查子进程时异常终止；
+# package 的运行期可用性由真正使用它的隔离入口验证。
 
 # 运行期需要的全部 R package（xml2 由 officer 依赖自动带入）。
 skill_runtime_packages <- function() {
@@ -24,7 +28,9 @@ skill_test_packages <- function() {
 }
 
 skill_missing_packages <- function(packages) {
-  packages[!vapply(packages, function(p) requireNamespace(p, quietly = TRUE), logical(1))]
+  packages <- unique(as.character(packages))
+  installed <- rownames(utils::installed.packages(lib.loc = .libPaths(), noCache = TRUE))
+  packages[!packages %in% installed]
 }
 
 skill_default_repos <- function() {
@@ -35,10 +41,12 @@ skill_default_repos <- function() {
 }
 
 # 检查（并按需安装）指定 package 集合。返回本次安装的 package 向量。
+# 此函数有意只检查安装元数据，不调用 requireNamespace() 或逐包健康检查子进程。
 ensure_skill_packages <- function(packages = skill_runtime_packages(), install = TRUE, repos = NULL, quiet = FALSE) {
+  packages <- unique(as.character(packages))
   missing <- skill_missing_packages(packages)
   if (!length(missing)) {
-    if (!quiet) message("Skill 依赖检查通过：", length(packages), " 个 package 全部就绪。")
+    if (!quiet) message("Skill 依赖安装元数据检查通过：", length(packages), " 个 package 全部已安装。")
     return(invisible(character()))
   }
 
@@ -58,10 +66,10 @@ ensure_skill_packages <- function(packages = skill_runtime_packages(), install =
   still_missing <- skill_missing_packages(missing)
   if (length(still_missing)) {
     stop(
-      "以下 package 安装后仍不可用：", paste(still_missing, collapse = ", "),
-      "。请检查网络连接或手工安装后重跑。"
+      "以下 package 安装后仍未出现在当前 library path：", paste(still_missing, collapse = ", "),
+      "。请检查网络连接、安装日志和 .libPaths() 后重跑。"
     )
   }
-  if (!quiet) message("依赖安装完成：", paste(missing, collapse = ", "))
+  if (!quiet) message("依赖安装完成并通过安装元数据复查：", paste(missing, collapse = ", "))
   invisible(missing)
 }

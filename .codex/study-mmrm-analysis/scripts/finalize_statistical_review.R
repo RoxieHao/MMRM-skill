@@ -1,5 +1,3 @@
-options(encoding = "UTF-8")
-
 args <- commandArgs(trailingOnly = TRUE)
 get_arg <- function(name, required = TRUE, default = NULL) {
   prefix <- paste0("--", name, "=")
@@ -54,8 +52,20 @@ default_source <- if (length(existing_filled) == 1L) existing_filled[[1L]] else 
 source_review <- normalizePath(get_arg("source-review", required = FALSE, default = default_source), winslash = "/", mustWork = TRUE)
 target_review <- get_arg("target-review", required = FALSE, default = file.path(study_dir, "statistician-review", "statistical-review.md"))
 allow_unresolved <- parse_logical_arg(get_arg("allow-unresolved", required = FALSE, default = "true"), "allow-unresolved")
+result_path <- get_arg("result-file", required = FALSE, default = review_finalization_result_path(study_dir))
 
-result <- finalize_statistical_review(study_dir, source_review, target_review, allow_unresolved = allow_unresolved)
+result <- tryCatch(
+  finalize_statistical_review(study_dir, source_review, target_review, allow_unresolved = allow_unresolved),
+  error = function(e) {
+    issue <- review_finalize_issue("ALL", "finalization", conditionMessage(e), "successful finalization", "Correct the reported finalization error and run finalization again.")
+    list(
+      target_review = normalizePath(target_review, winslash = "/", mustWork = FALSE), mapping_count = 0L, issue_count = 1L,
+      ready_for_final_signature = FALSE, issues = review_finalize_normalize_issues(list(issue)), report = conditionMessage(e), published = FALSE
+    )
+  }
+)
+result_artifact <- review_finalization_write_result(result_path, result, source_review, target_review)
+cat("Finalization result artifact: ", result_artifact, "\n", sep = "")
 if (!isTRUE(result$published)) {
   cat(result$report, "\n", sep = "")
   cat("No review, mapping, or manifest files were changed.\n")
