@@ -1,7 +1,7 @@
 standard_case_summary_pattern_schemas <- function() {
   list(
     analysis_catalog = c("analysis_id", "tfl_id", "title"),
-    run_records = c("analysis_id", "run_id", "output_status", "computational_risk", "specification_sha256", "contract_sha256"),
+    run_records = c("analysis_id", "run_id", "output_status", "computational_risk", "review_sha256", "analysis_plan_sha256", "approval_payload_sha256", "contract_sha256"),
     diagnostic_metadata = c("analysis_id", "analysis_group_id", "final_covariance", "fallback_used", "convergence_status", "computational_risk", "run_status"),
     registry = c("pattern_id", "adapter_family", "description", "status"),
     promotion_records = c("pattern_id", "decision", "reviewed_by", "reviewed_at", "evidence_ids", "regression_test_status", "note"),
@@ -65,7 +65,7 @@ standard_case_unique_ids <- function(items, field, context) {
 
 validate_standard_case_summary <- function(summary) {
   required <- c(
-    "schema_version", "study_id", "profile_version", "contract_sha256", "analysis_catalog",
+    "schema_version", "study_id", "profile_version", "review_sha256", "analysis_plan_sha256", "approval_payload_sha256", "contract_sha256", "analysis_catalog",
     "run_records", "diagnostic_metadata", "adapter_patterns", "pattern_candidates", "pattern_evidence", "promotion"
   )
   if (!is.list(summary) || is.null(names(summary)) || anyDuplicated(names(summary)) || !identical(sort(names(summary)), sort(required))) {
@@ -74,7 +74,7 @@ validate_standard_case_summary <- function(summary) {
   if (!identical(summary$schema_version, "standard-mmrm-case-summary/v1") ||
       !identical(summary$profile_version, standard_mmrm_profile_version()) ||
       !is.character(summary$study_id) || length(summary$study_id) != 1L || !nzchar(summary$study_id) ||
-      !is.character(summary$contract_sha256) || length(summary$contract_sha256) != 1L || !grepl("^[A-Fa-f0-9]{64}$", summary$contract_sha256)) {
+      any(!vapply(summary[c("review_sha256", "analysis_plan_sha256", "approval_payload_sha256", "contract_sha256")], function(x) is.character(x) && length(x) == 1L && grepl("^[A-Fa-f0-9]{64}$", x), logical(1)))) {
     stop("case summary identity 无效。")
   }
   catalog_analysis_ids <- standard_case_unique_ids(summary$analysis_catalog, "analysis_id", "analysis_catalog")
@@ -186,7 +186,8 @@ validate_standard_case_summary <- function(summary) {
   invisible(TRUE)
 }
 
-standard_case_summary <- function(paths, contract) {
+standard_case_summary <- function(paths, chain) {
+  contract <- chain$contract
   catalog <- standard_contract_catalog(contract)
   manifest_path <- paths$output_manifest
   if (!file.exists(manifest_path)) stop("缺少 tfl-output-manifest.csv，无法生成覆盖全部 TFL 的 case summary。")
@@ -196,46 +197,29 @@ standard_case_summary <- function(paths, contract) {
       !setequal(as.character(manifest$tfl_id), as.character(catalog$tfl_id)) || nrow(manifest) != nrow(catalog)) {
     stop("tfl-output-manifest.csv 必须为 contract 中的每个 TFL 提供恰好一行。")
   }
-  records <- lapply(seq_len(nrow(catalog)), function(i) {
+  # Each entry is built only from the full artifact validator under the active approval chain;
+  # there is no partial run-record path and no missing-diagnostics bypass.
+  artifacts <- lapply(seq_len(nrow(catalog)), function(i) {
     analysis_id <- catalog$analysis_id[[i]]
-    path <- analysis_output_paths(paths, analysis_id)$run_record
-    if (file.exists(path)) {
-      data <- read_utf8_bom_csv(path)
-      required <- c("analysis_id", "tfl_id", "run_id", "output_status", "computational_risk", "specification_sha256", "contract_sha256")
-      manifest_row <- manifest[match(catalog$tfl_id[[i]], as.character(manifest$tfl_id)), , drop = FALSE]
-      if (nrow(data) == 1L && all(required %in% names(data)) &&
-          identical(as.character(data$analysis_id[[1L]]), analysis_id) &&
-          identical(as.character(data$tfl_id[[1L]]), as.character(catalog$tfl_id[[i]])) &&
-          identical(toupper(as.character(data$contract_sha256[[1L]])), toupper(attr(contract, "sha256"))) &&
-          identical(as.character(data$output_status[[1L]]), as.character(manifest_row$output_status[[1L]]))) {
-        return(data[c("analysis_id", "run_id", "output_status", "computational_risk", "specification_sha256", "contract_sha256")])
-      }
-    }
+    analysis <- standard_contract_get_analysis(contract, analysis_id)
+    artifact <- standard_validate_analysis_artifacts(paths, chain, analysis)
     manifest_row <- manifest[match(catalog$tfl_id[[i]], as.character(manifest$tfl_id)), , drop = FALSE]
-    data.frame(
-      analysis_id = analysis_id,
-      run_id = "collector-synthesized",
-      output_status = as.character(manifest_row$output_status[[1L]]),
-      computational_risk = "Not assessed",
-      specification_sha256 = "not_available",
-      contract_sha256 = toupper(attr(contract, "sha256")),
-      stringsAsFactors = FALSE
-    )
+    if (!identical(as.character(artifact$record$output_status[[1L]]), as.character(manifest_row$output_status[[1L]]))) {
+      stop("case summary manifest/run-record output_status mismatch: ", analysis_id)
+    }
+    artifact
   })
-  diagnostics <- lapply(catalog$analysis_id, function(analysis_id) {
-    path <- analysis_output_paths(paths, analysis_id)$diagnostic_csv
-    if (!file.exists(path)) return(NULL)
-    data <- read_utf8_bom_csv(path)
-    required <- c("analysis_id", "analysis_group_id", "final_covariance", "fallback_used", "convergence_status", "computational_risk", "run_status")
-    if (!all(required %in% names(data))) return(NULL)
-    data[required]
-  })
-  diagnostics <- diagnostics[!vapply(diagnostics, is.null, logical(1))]
-  record_data <- do.call(rbind, records)
-  diagnostic_data <- if (length(diagnostics)) do.call(rbind, diagnostics) else NULL
+  record_data <- do.call(rbind, lapply(artifacts, function(artifact) {
+    artifact$record[c("analysis_id", "run_id", "output_status", "computational_risk", "review_sha256", "analysis_plan_sha256", "approval_payload_sha256", "contract_sha256")]
+  }))
+  diagnostic_data <- do.call(rbind, lapply(artifacts, function(artifact) {
+    artifact$diagnostics[c("analysis_id", "analysis_group_id", "final_covariance", "fallback_used", "convergence_status", "computational_risk", "run_status")]
+  }))
   summary <- list(
     schema_version = "standard-mmrm-case-summary/v1", study_id = contract$study$study_id,
-    profile_version = contract$profile_version, contract_sha256 = toupper(attr(contract, "sha256")),
+    profile_version = contract$profile_version,
+    review_sha256 = toupper(contract$approval$review_sha256), analysis_plan_sha256 = toupper(contract$approval$analysis_plan_sha256),
+    approval_payload_sha256 = toupper(contract$approval$approval_payload_sha256), contract_sha256 = toupper(attr(contract, "sha256")),
     analysis_catalog = lapply(seq_len(nrow(catalog)), function(i) as.list(catalog[i, c("analysis_id", "tfl_id", "title"), drop = FALSE])),
     run_records = if (!is.null(record_data)) lapply(seq_len(nrow(record_data)), function(i) as.list(record_data[i, , drop = FALSE])) else list(),
     diagnostic_metadata = if (!is.null(diagnostic_data)) lapply(seq_len(nrow(diagnostic_data)), function(i) as.list(diagnostic_data[i, , drop = FALSE])) else list(),
@@ -249,9 +233,9 @@ standard_case_summary <- function(paths, contract) {
   summary
 }
 
-write_standard_case_summary <- function(paths, contract, output_path) {
+write_standard_case_summary <- function(paths, chain, output_path) {
   if (!requireNamespace("yaml", quietly = TRUE)) stop("缺少 yaml package。")
-  summary <- standard_case_summary(paths, contract)
+  summary <- standard_case_summary(paths, chain)
   validate_standard_case_summary(summary)
   yaml::write_yaml(summary, output_path)
   invisible(summary)

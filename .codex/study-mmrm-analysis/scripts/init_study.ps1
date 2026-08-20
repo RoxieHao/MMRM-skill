@@ -13,12 +13,12 @@ $studyRoot = [IO.Path]::GetFullPath($StudyDir)
 $skillRoot = Split-Path -Parent $PSScriptRoot
 $templateRoot = Join-Path $skillRoot 'assets\study-control'
 
-# Verify (and install when missing) all runtime R packages before doing anything else.
+# Verify all runtime R packages before doing anything else. Set MMRM_SKILL_NO_INSTALL=1 to prohibit installation.
 $rscript = Get-Command Rscript.exe -ErrorAction SilentlyContinue
 if (-not $rscript) { $rscript = Get-Command Rscript -ErrorAction SilentlyContinue }
 if ($rscript) {
     $depScript = Join-Path $skillRoot 'scripts\check_dependencies.R'
-    Write-Host 'Checking R package dependencies (installing any missing)...'
+    Write-Host 'Checking R package dependencies...'
     Push-Location $skillRoot
     try { & $rscript.Source $depScript } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw 'Dependency check failed. Install the required R packages and re-run init_study.ps1.' }
@@ -56,7 +56,7 @@ if (-not (Test-Path -LiteralPath $briefingDestination)) {
 }
 
 Write-Host "Initialized intake-first MMRM study for route: $Route"
-Write-Host 'Place source materials or complete input\statistician-analysis-input.md, then register and analyze intake materials before creating statistical-review.md.'
+Write-Host 'Place current-study source materials or complete input\statistician-analysis-input.md, then generate the pending review and analysis-plan template.'
 
 Write-Host "Initialized minimal controlled MMRM study: $studyRoot"
 Write-Host 'Output directories and tfl-output-manifest.csv will be created only by a validated execution/collector.'

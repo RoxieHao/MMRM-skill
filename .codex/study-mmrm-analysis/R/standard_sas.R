@@ -1,4 +1,9 @@
-standard_sas_quote <- function(x) paste0("\"", gsub("\"", "\"\"", as.character(x), fixed = TRUE), "\"")
+standard_sas_quote <- function(x) {
+  value <- as.character(x)
+  if (length(value) != 1L || is.na(value)) stop("PLAN-SAS-UNSUPPORTED-LITERAL: SAS character literal must be a single non-NA value.")
+  if (grepl("[[:cntrl:]]", value)) stop("PLAN-SAS-UNSUPPORTED-LITERAL: SAS character literal must not contain control characters.")
+  paste0("'", gsub("'", "''", value, fixed = TRUE), "'")
+}
 
 standard_sas_literal <- function(x) {
   if (is.logical(x)) return(ifelse(x, "1", "0"))
@@ -34,13 +39,31 @@ standard_sas_fixed_terms <- function(analysis) {
   unname(map[as.character(unlist(analysis$fixed_effects, use.names = FALSE))])
 }
 
-render_standard_sas_template <- function(contract, analysis, specification_sha256, contract_sha256) {
+standard_sas_recode_lines <- function(derivation) {
+  ir <- standard_normalize_recode(derivation); source <- ir$source_variable; target <- ir$target_variable
+  declaration <- if (identical(ir$value_type, "character")) {
+    target_lengths <- nchar(enc2utf8(as.character(unlist(lapply(ir$levels, `[[`, "target_value"), use.names = FALSE))), type = "bytes")
+    length <- if (identical(ir$unmatched, "preserve") || identical(ir$missing, "preserve")) 32767L else max(1L, target_lengths)
+    paste0("  length ", target, " $", length, ";")
+  } else NULL
+  conditions <- unlist(lapply(seq_along(ir$levels), function(i) {
+    level <- ir$levels[[i]]; prefix <- if (i == 1L) "  if" else "  else if"
+    paste0(prefix, " not missing(", source, ") and ", source, " in (", paste(vapply(unlist(level$source_values, use.names = FALSE), standard_sas_literal, character(1)), collapse = ", "), ") then ", target, "=", standard_sas_literal(level$target_value), ";")
+  }), use.names = FALSE)
+  unmatched <- switch(ir$unmatched, error = paste0("  else if not missing(", source, ") then do; put 'ERROR: PLAN-DERIVATION unmatched value'; abort cancel; end;"), preserve = paste0("  else if not missing(", source, ") then ", target, "=", source, ";"), set_missing = paste0("  else if not missing(", source, ") then call missing(", target, ");"))
+  missing <- switch(ir$missing, error = paste0("  if missing(", source, ") then do; put 'ERROR: PLAN-DERIVATION missing value'; abort cancel; end;"), preserve = paste0("  if missing(", source, ") then ", target, "=", source, ";"), set_missing = paste0("  if missing(", source, ") then call missing(", target, ");"))
+  c(paste0("  /* recode ", ir$id, "; normalized_type=", ir$value_type, "; blank_is_missing=true */"), declaration, conditions, unmatched, missing)
+}
+
+render_standard_sas_template <- function(contract, analysis, approval_payload_sha256, contract_sha256) {
   validate_standard_mmrm_contract(contract)
   standard_contract_get_analysis(contract, analysis$analysis_id)
   header <- c(
     "/* Standard MMRM Profile v1 deterministic SAS template.",
     paste0("   Analysis: ", analysis$analysis_id),
-    paste0("   Specification SHA-256: ", toupper(specification_sha256)),
+    paste0("   Review SHA-256: ", toupper(contract$approval$review_sha256)),
+    paste0("   Analysis plan SHA-256: ", toupper(contract$approval$analysis_plan_sha256)),
+    paste0("   Approval payload SHA-256: ", toupper(approval_payload_sha256)),
     paste0("   Contract SHA-256: ", toupper(contract_sha256)),
     "   Status: template_generated_not_executed", "*/",
     "options validvarname=v7;",
@@ -61,6 +84,7 @@ render_standard_sas_template <- function(contract, analysis, specification_sha25
       "%put ERROR: sas_adapter_required;", "%abort cancel;"
     ))
   }
+  render_body <- tryCatch({
   extension <- tolower(tools::file_ext(analysis$dataset$file))
   input <- switch(
     extension,
@@ -93,6 +117,7 @@ render_standard_sas_template <- function(contract, analysis, specification_sha25
   )
   data_step <- c(
     "data _standard_mmrm;", "  set _source;",
+    unlist(lapply(if (is.null(analysis$derivations)) list() else analysis$derivations, standard_sas_recode_lines), use.names = FALSE),
     if (length(filters)) paste0("  if not (", paste(filters, collapse = " and "), ") then delete;") else NULL,
     paste0("  _subject=strip(vvalue(", mappings$subject, "));"),
     paste0("  _response=", mappings$response, ";"), paste0("  _baseline=", mappings$baseline, ";"),
@@ -148,5 +173,18 @@ render_standard_sas_template <- function(contract, analysis, specification_sha25
     if (length(covariance) > 1L) c("", "/* Approved fallback covariance statements; activate only after primary failure:", paste0("  repeated _visit / subject=_subject type=", sas_cov[covariance[-1L]], ";"), "*/"),
     "/* proc export data=work._mmrm_lsmeans outfile=\"<APPROVED_OUTPUT_FILE.csv>\" dbms=csv replace; run; */"
   )
-  c(header, input, "", data_step, model)
+  c(input, "", data_step, model)
+  }, error = function(e) {
+    if (grepl("PLAN-SAS-UNSUPPORTED-LITERAL", conditionMessage(e), fixed = TRUE)) return(structure(conditionMessage(e), class = "standard_sas_unsupported"))
+    stop(e)
+  })
+  if (inherits(render_body, "standard_sas_unsupported")) {
+    return(c(
+      header,
+      "/* sas_unsupported_literal: an approved value cannot be represented as a macro-safe SAS data literal;",
+      "   no data-preparation or model code is emitted. Correct the approved value before execution. */",
+      "%put ERROR: sas_unsupported_literal;", "%abort cancel;"
+    ))
+  }
+  c(header, render_body)
 }

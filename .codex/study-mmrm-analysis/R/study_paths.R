@@ -25,7 +25,8 @@ study_paths <- function(script_file = script_path()) {
     input_dir = file.path(study_dir, "input"),
     backup_trace_dir = file.path(study_dir, "backup-trace"),
     statistician_review_dir = file.path(study_dir, "statistician-review"),
-    analysis_specification_file = file.path(study_dir, "statistician-review", "analysis-specification.md"),
+    analysis_plan_file = file.path(study_dir, "statistician-review", "analysis-plan.yaml"),
+    standard_contract_file = file.path(study_dir, "statistician-review", "standard-mmrm-contract.yaml"),
     statistical_review_file = file.path(study_dir, "statistician-review", "statistical-review.md"),
     data_processing_dir = file.path(study_dir, "analysis", "data-processing"),
     r_analysis_dir = file.path(study_dir, "analysis", "r"),
@@ -59,6 +60,7 @@ analysis_output_paths <- function(paths, analysis_id) {
     run_record = file.path(root, "analysis-run-record.csv"),
     diagnostic_report = file.path(root, "diagnostics", "mmrm-run-diagnostic-report.md"),
     diagnostic_csv = file.path(root, "diagnostics", "mmrm-run-diagnostics.csv"),
+    recode_audit = file.path(root, "diagnostics", "mmrm-recode-audit.csv"),
     log_file = file.path(root, "logs", "run.log")
   )
 }

@@ -1,0 +1,49 @@
+analysis_plan_schema_version: "2.0"
+study_id: STUDY-ID
+execution_context:
+  profile_version: standard-mmrm-profile/v1
+  data_availability: null
+  data_classification: null
+  intended_use: null
+analyses:
+  - analysis_id: MMRM-01
+    source_tfl_id: TFL-001
+    title: null
+    dataset:
+      file: null
+      format: null
+      relative_path: null
+      sha256: null
+    adapter: null
+    mappings:
+      subject: null
+      response: null
+      baseline: null
+      visit: null
+    derivations: []
+    filters: []
+    groups: []
+    endpoint_definitions: []
+    fixed_effects: []
+    covariance:
+      primary: null
+      fallback: []
+    df_method: null
+    estimands:
+      visit_lsmeans: null
+      treatment_visit_lsmeans: null
+      pairwise_differences: null
+    treatment: null
+    trace:
+      dataset: []
+      adapter: []
+      mappings: []
+      derivations: []
+      filters: []
+      groups: []
+      endpoint_definitions: []
+      fixed_effects: []
+      covariance: []
+      df_method: []
+      estimands: []
+      treatment: []

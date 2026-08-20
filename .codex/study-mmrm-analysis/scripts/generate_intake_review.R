@@ -31,7 +31,7 @@ study_dir <- normalizePath(get_arg("study-dir"), winslash = "/", mustWork = TRUE
 replace_pending <- parse_logical_arg(get_arg("replace-pending", required = FALSE, default = "false"), "replace-pending")
 project_dir <- find_project_root(study_dir)
 skill_r <- file.path(project_dir, ".codex", "study-mmrm-analysis", "R")
-for (helper in c("dependencies.R", "io.R", "specification.R", "endpoint_mapping.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R")) source(file.path(skill_r, helper), encoding = "UTF-8")
+for (helper in c("dependencies.R", "canonical_hash.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R")) source(file.path(skill_r, helper), encoding = "UTF-8")
 ensure_skill_packages()
 
 infer_intake_route <- function(study_dir) {
@@ -50,5 +50,6 @@ if (!route %in% c("statistician_authored", "ai_source_extraction")) stop("--rout
 result <- write_intake_statistical_review(study_dir, project_dir, route, replace_pending = replace_pending)
 enrichment <- intake_enrich_review_with_adam(study_dir, project_dir, result$review_path)
 cat("Generated pending intake statistical review with ", result$tfl_count, " MMRM TFL candidate table(s): ", result$review_path, "\n", sep = "")
+cat("Generated null-containing analysis plan template: ", result$analysis_plan_path, "\n", sep = "")
 cat("Intake scan trace: ", result$trace_path, "\n", sep = "")
 if (isTRUE(enrichment$enriched)) cat("Enriched intake review from ", enrichment$dataset_count, " ADaM dataset catalog item(s).\n", sep = "")

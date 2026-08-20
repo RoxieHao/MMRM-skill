@@ -89,3 +89,19 @@ read_linked_source_data <- function(project_dir, manifest_path, binding) {
   if (!is.data.frame(data)) stop("linked source must read as a data.frame: ", as.character(binding$file))
   as.data.frame(data, stringsAsFactors = FALSE, check.names = FALSE)
 }
+
+source_evidence_registry <- function(project_dir, study_dir, manifest_path = file.path(study_dir, "backup-trace", "input-manifest.csv")) {
+  if (!file.exists(manifest_path)) stop("PLAN-HASH-SOURCE: input-manifest.csv not found.")
+  manifest <- read_utf8_bom_csv(manifest_path); required <- c("relative_path", "sha256", "status"); missing <- setdiff(required, names(manifest)); if (length(missing)) stop("PLAN-HASH-SOURCE: manifest missing columns: ", paste(missing, collapse = ", "))
+  rows <- manifest[trimws(as.character(manifest$status)) %in% c("registered_input", "linked_source"), , drop = FALSE]; if (!nrow(rows)) stop("PLAN-HASH-SOURCE: manifest has no registered current-study sources.")
+  study_relative <- project_relative_path(study_dir, project_dir)
+  relative <- vapply(as.character(rows$relative_path), function(path) { path <- canonical_normalize_relative_path(path, "manifest.relative_path"); if (startsWith(path, paste0(study_relative, "/"))) path else paste0(study_relative, "/", path) }, character(1))
+  canonical_assert_no_path_collisions(relative, "source evidence paths"); sha <- toupper(trimws(as.character(rows$sha256))); if (any(!grepl("^[A-F0-9]{64}$", sha))) stop("PLAN-HASH-SOURCE: manifest contains invalid SHA-256.")
+  absolute <- vapply(relative, normalize_project_relative_path, character(1), project_dir = project_dir, context = "source evidence path")
+  if (any(!file.exists(absolute))) stop("PLAN-HASH-SOURCE: registered source missing: ", paste(relative[!file.exists(absolute)], collapse = ", "))
+  actual <- toupper(vapply(absolute, digest::digest, character(1), file = TRUE, algo = "sha256")); if (any(actual != sha)) stop("PLAN-HASH-SOURCE: registered source hash mismatch: ", paste(relative[actual != sha], collapse = ", "))
+  ids <- if ("source_id" %in% names(rows)) trimws(as.character(rows$source_id)) else paste0("SRC-INPUT-", sprintf("%03d", seq_len(nrow(rows))))
+  if (any(!grepl("^SRC-[A-Za-z0-9_-]+$", ids)) || anyDuplicated(ids)) stop("PLAN-HASH-SOURCE: source IDs invalid or duplicated.")
+  order <- order(relative, method = "radix"); list(entries = lapply(order, function(i) list(relative_path = relative[[i]], sha256 = sha[[i]])), ids = ids[order])
+}
+source_evidence_sha256 <- function(registry) canonical_sha256(registry$entries)

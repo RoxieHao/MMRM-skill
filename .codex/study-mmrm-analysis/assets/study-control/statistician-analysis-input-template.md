@@ -1,6 +1,6 @@
 # 统计师 MMRM Analysis 输入模板（TFL briefing 版）
 
-> 新 study 初始化时，这份可选模板会复制为 `input/statistician-analysis-input.md`。它是 AI intake 输入，不是批准或签核文件。统计师只需要按人脑分析逻辑说明“哪些 TFL 要做 MMRM、每张表怎么分析、有哪些特殊规则”。`analysis_id`、`estimate_id`、Endpoint Mapping 表、typed contract 字段和 R/SAS program 名称由 AI 在后续 review/specification 阶段自动生成。除 ADaM 变量名、dataset 名、PARAMCD、TFL ID、模型结构和状态码等技术标识外，请使用中文。不适用填写 `not_applicable`；不能确认填写 `unknown`，系统会阻止正式执行并要求人工确认。
+> 新 study 初始化时，这份可选模板会复制为 `input/statistician-analysis-input.md`。它是 AI intake 输入，不是批准或签核文件。统计师只需要按人脑分析逻辑说明“哪些 TFL 要做 MMRM、每张表怎么分析、有哪些特殊规则”。`analysis_id`、typed `analysis-plan.yaml` 和后续 contract/program 名称由 AI 在审阅后编译；统计师只编辑 `statistical-review.md`，不直接编辑嵌套 YAML。除 ADaM 变量名、dataset 名、PARAMCD、TFL ID、模型结构和状态码等技术标识外，请使用中文。不适用填写 `not_applicable`；不能确认填写 `unknown`，编译时必须保留为 `null` 并阻止 finalization，不能由 profile 默认值补齐。
 
 ## 1. 作者和数据声明
 
@@ -33,7 +33,7 @@
 
 ## 4. TFL Analysis 说明：`<TFL ID>`
 
-> 为每张 TFL 复制一份完整的第 4 节。统计师按自然语言说明规则即可；AI 会在 pending `statistical-review.md` 中拆成固定十行候选规则、Endpoint Mapping 和 Issues。
+> 为每张 TFL 复制一份完整的第 4 节。统计师按自然语言说明规则即可；AI 会在 pending `statistical-review.md` 中拆成固定十行候选规则与 Issues，并在显式 **Compile Analysis Plan** 步骤生成 typed plan。
 
 ### 4.1 这张表的分析目的
 
@@ -52,7 +52,7 @@
 
 ```text
 主分析数据集：<例如 ADQSSUM；只写逻辑用途，不要手工编辑 input-manifest.csv>
-运行数据绑定：<由 pending statistical-review.md 自动展示真实 file_name/format/path/SHA；统计师必须在 review 中确认唯一候选，或在歧义时填写完整 file_name>
+运行数据绑定：<由批准的 analysis-plan.yaml 固定真实 file_name/format/path/SHA；pending review 只展示候选证据，不自动绑定>
 需要从 ADSL 合并的变量：<例如 COAFL; COUNTRY；没有则 not_applicable>
 合并键：<例如 USUBJID；没有则 not_applicable>
 人群变量和规则：<例如 ADSL.COAFL = "Y">
@@ -66,7 +66,7 @@ endpoint 变量：<例如 PARAMCD>
 
 ### 4.3 数据筛选和记录选择
 
-请写“纳入/排除/重复记录处理”的人话规则，不需要填 operator 表。
+请写“纳入/排除/重复记录处理”的人话规则，不需要填 operator 表。AI 只在有明确决定时编译为 typed predicates；歧义保持 `null`。
 
 ```text
 纳入规则：<例如 纳入 COAFL = "Y" 且 CHG 非缺失的记录>

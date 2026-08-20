@@ -7,7 +7,7 @@ intake_candidate_rule_categories <- function() {
 
 intake_candidate_table_columns <- function() {
   if (exists("statistical_review_candidate_table_columns", mode = "function", inherits = TRUE)) return(statistical_review_candidate_table_columns())
-  c("规则类别", "AI 识别的候选规则", "证据来源与识别状态", "Standard MMRM Profile v1 评估", "统计师审阅意见", "结构化处置")
+  c("规则类别", "AI 识别的候选规则", "证据来源与识别状态", "Standard MMRM Profile v1 评估", "统计师审阅意见", "decision_id")
 }
 
 intake_markdown_split_row <- function(line) {
@@ -250,7 +250,7 @@ intake_candidate_rows <- function(tfl) {
         if (candidate[[10]] != "未识别") "可表达，待统计师确认" else "需要补充规则"
       ),
       "统计师审阅意见" = rep("", 10L),
-      "结构化处置" = rep("action=pending", 10L),
+      "decision_id" = paste0("DEC-", gsub("[^A-Za-z0-9]+", "-", toupper(tfl$tfl_id)), "-", sprintf("%02d", seq_len(10L))),
       stringsAsFactors = FALSE,
       check.names = FALSE
     )
@@ -295,7 +295,7 @@ intake_candidate_rows <- function(tfl) {
       if (has("无结构型|type\\s*=\\s*un")) "可表达，待统计师确认" else "需要补充规则", if (has("lsmeans|校正均值")) "可表达，待统计师确认" else "需要补充规则"
     ),
     "统计师审阅意见" = rep("", 10L),
-    "结构化处置" = rep("action=pending", 10L),
+    "decision_id" = paste0("DEC-", gsub("[^A-Za-z0-9]+", "-", toupper(tfl$tfl_id)), "-", sprintf("%02d", seq_len(10L))),
     stringsAsFactors = FALSE, check.names = FALSE
   )
   rows
@@ -357,39 +357,36 @@ intake_render_candidate_block <- function(tfl) {
 intake_render_review <- function(study_dir, project_dir, route, discovery) {
   study_id <- basename(normalizePath(study_dir, winslash = "/", mustWork = TRUE))
   manifest_relative <- project_relative_path(discovery$manifest$path, project_dir)
-  manifest_hash <- toupper(specification_sha256(discovery$manifest$path))
+  manifest_hash <- toupper(file_sha256(discovery$manifest$path))
   candidate_blocks <- if (length(discovery$tfls)) unlist(lapply(discovery$tfls, intake_render_candidate_block), use.names = FALSE) else c(
     "未发现明确的 MMRM TFL；统计师可在此补充材料或明确不适用。", ""
   )
   issues <- if (length(discovery$tfls)) c(
     "| issue_id | scope | question_or_risk | resolution | status |",
     "|---|---|---|---|---|",
-    "| INTAKE-001 | ALL | 所有候选 TFL 的待确认规则必须逐行处置，且采用/修改结果须形成最终 Endpoint Mapping 和 execution contract。 | 待统计师处置 | unresolved |"
+    "| INTAKE-001 | ALL | 所有候选 TFL 的统计规则必须明确决定并编译进完整 Analysis Plan。 | 待统计师处置 | unresolved |"
   ) else c(
     "| issue_id | scope | question_or_risk | resolution | status |",
     "|---|---|---|---|---|",
     "| INTAKE-001 | ALL | 当前 registered input 中未发现明确 MMRM TFL。 | 待统计师确认是否补充材料或声明不适用 | unresolved |"
   )
   metadata <- c(
-    "---", "review_schema_version: '1.1'", paste0("study_id: ", study_id), paste0("generation_route: ", route),
-    "review_status: pending", "reviewed_by: ''", "reviewed_at_utc: ''", "approved_execution_sha256: ''",
-    paste0("source_input_file: ", manifest_relative), paste0("source_input_sha256: ", manifest_hash), "---", ""
+    "---", "review_schema_version: '2.0'", paste0("study_id: ", study_id), paste0("generation_route: ", route),
+    "review_status: pending", "reviewed_by: ''", "reviewed_at_utc: ''", "finalization_status: pending",
+    paste0("source_manifest_file: ", manifest_relative), "analysis_plan_file: ''", "analysis_plan_sha256: ''", "source_evidence_sha256: ''", "review_execution_content_sha256: ''", "approval_payload_sha256: ''", "---", ""
   )
   body <- c(
     "# 统计师 MMRM 审阅", "",
-    "> 本文件是当前 study 唯一人工审阅与签核文件。AI 候选仅来自已登记的当前 study input；候选不等同于批准的执行规则。pending 状态不得填写签核信息。", "",
-    "## 1. 审阅结论与签核", "当前为 pending。统计师必须处置第 3 节所有候选规则、解决全部 Issues，并完成最终 Endpoint Mapping 后方可签核。", "",
+    "> 本文件是人工审阅与签名界面。AI 候选仅来自已登记的当前 study input；analysis-plan.yaml 是唯一机器可执行统计语义。", "",
+    "## 1. 审阅结论与签核", "当前为 pending。统计师必须处置候选规则并解决全部 Issues；AI 不得签名或从 defaults 填补未决定值。", "",
     "## 2. Study 与数据范围", paste0("Study：", study_id, "。已扫描 ", nrow(discovery$sources), " 个已登记文本材料，识别 ", length(discovery$tfls), " 个明确 MMRM TFL。"), "",
-    "## 3. Analysis 与 TFL 清单", "以下每张表均为 AI 候选规则表。统计师仅填写“统计师审阅意见”；AI 代理生成或更新“结构化处置”，并在审阅完成后重建 Endpoint Mapping。R finalizer 只校验结构化处置和生成的 mapping，不从自由文本推断统计规则。", "",
+    "## 3. Analysis 与 TFL 清单", "统计师填写审阅意见；AI 按 stable decision_id 编译完整 typed Analysis Plan。R 不从自由文本推断执行参数。", "",
     candidate_blocks,
-    "## 4. Endpoint Mapping 与分组确认",
-    "| analysis_id | source_tfl_id | group_id | endpoint_label | endpoint_variable | selected_codes | selection_mode | instrument / version / reporter / subscale | row_allocation_rule | source_ref | review_status | reviewer_note |",
-    "|---|---|---|---|---|---|---|---|---|---|---|---|",
-    "| <待统计师确认> | <由 finalizer 自动填充> | <待统计师确认> | <待统计师确认> | <待统计师确认> | <待统计师确认> | <待统计师确认> | <待统计师确认> | <待统计师确认> | <待统计师确认> | <待填写 accepted/modified> | <待填写> |", "",
-    "## 5. 模型、协方差与估计量确认", "第 3 节候选仅作审阅输入。不得将未处置、Profile 不支持或未映射的数据规则写入最终执行定义。", "",
-    "## 6. Adapter / 派生 / 行分配确认", "如需 adapter、窗口内记录选择或复杂 endpoint 分配，必须在批准前明确并固定到 typed contract。", "",
+    "## 4. Analysis Plan（只读）", "<!-- ANALYSIS_PLAN_BEGIN -->", "Pending compilation.", "<!-- ANALYSIS_PLAN_END -->", "",
+    "## 5. 模型、协方差与估计量确认", "所有模型、协方差、自由度和估计量必须在 Analysis Plan 中显式批准。", "",
+    "## 6. Adapter / 派生 / 行分配确认", "Set selection 使用 in；typed recode 显式声明 policies；复杂转换使用批准且 SHA-pinned 的 adapter。", "",
     "## 7. 未解决问题与决议", issues, "",
-    "## 8. Execution 内容指纹", "当前 pending，尚未生成 approved execution SHA-256。"
+    "## 8. Approval Payload 指纹", "Pending finalization."
   )
   c(metadata, body)
 }
@@ -407,8 +404,8 @@ write_intake_statistical_review <- function(study_dir, project_dir, route, repla
     }
   }
   discovery <- intake_discover_mmrm_tfls(study_dir, project_dir)
-  mapping_path <- file.path(study_dir, "statistician-review", "endpoint-mapping.yaml")
-  endpoint_mapping_write_template(mapping_path, discovery$tfls)
+  mapping_path <- file.path(study_dir, "statistician-review", "retired-artifact.invalid")
+  retired_mapping_write_template(mapping_path, discovery$tfls)
   dir.create(dirname(review_path), recursive = TRUE, showWarnings = FALSE)
   writeLines(intake_render_review(study_dir, project_dir, route, discovery), review_path, useBytes = TRUE)
   trace_path <- file.path(study_dir, "backup-trace", "intake-mmrm-tfl-scan.md")
@@ -423,4 +420,42 @@ write_intake_statistical_review <- function(study_dir, project_dir, route, repla
   )
   writeLines(trace_lines, trace_path, useBytes = TRUE)
   list(review_path = review_path, trace_path = trace_path, tfl_count = length(discovery$tfls))
+}
+
+# Analysis-plan workflow overrides. Markdown is evidence/reviewer interface only.
+intake_render_review <- function(study_dir, project_dir, route, discovery) {
+  study_id <- basename(normalizePath(study_dir, winslash = "/", mustWork = TRUE)); manifest_relative <- project_relative_path(discovery$manifest$path, project_dir)
+  candidate_blocks <- if (length(discovery$tfls)) unlist(lapply(discovery$tfls, intake_render_candidate_block), use.names = FALSE) else c("No explicit MMRM TFL was found in registered input.", "")
+  issues <- c("| issue_id | scope | question_or_risk | resolution | status |", "|---|---|---|---|---|", "| INTAKE-001 | ALL | Required analysis-plan decisions remain unresolved. | Statistician records decisions; AI compiles analysis-plan.yaml. | unresolved |")
+  c("---", "review_schema_version: '2.0'", paste0("study_id: '", study_id, "'"), paste0("generation_route: '", route, "'"), "review_status: 'pending'", "reviewed_by: ''", "reviewed_at_utc: ''", "finalization_status: 'pending'", paste0("source_manifest_file: '", manifest_relative, "'"), "analysis_plan_file: ''", "analysis_plan_sha256: ''", "source_evidence_sha256: ''", "review_execution_content_sha256: ''", "approval_payload_sha256: ''", "---", "",
+    "# 统计师 MMRM 审阅", "", "> 统计师只编辑本 Markdown 的审阅意见和 issue resolution。analysis-plan.yaml 由显式 Compile Analysis Plan agent step 生成；R 不从自由文本推断执行参数。", "",
+    "## 1. 审阅结论与签核", "当前为 pending；签核字段由 approve_and_generate_analysis.R 在通过全部 gate 后写入。", "",
+    "## 2. Study 与数据范围", paste0("Study：", study_id, "。Registered evidence manifest：", manifest_relative, "。"), "",
+    "## 3. Analysis 与 TFL 清单", "每一行的 decision_id 是稳定 trace ID。统计师在“统计师审阅意见”中明确决定；歧义必须保留并形成 issue。", "", candidate_blocks,
+    "## 4. Analysis Plan（只读）", "<!-- ANALYSIS_PLAN_BEGIN -->", "Pending: compile and validate analysis-plan.yaml.", "<!-- ANALYSIS_PLAN_END -->", "",
+    "## 5. 模型、协方差与估计量确认", "完整 typed values 仅见第 4 节只读渲染；本节是人类审阅记录，不是执行输入。", "",
+    "## 6. Adapter / 派生 / 行分配确认", "Adapter 必须 SHA-pinned；built-in derivation 仅支持 typed recode；复杂转换必须使用批准 adapter。", "",
+    "## 7. 未解决问题与决议", issues, "",
+    "## 8. Approval Payload 指纹", "Pending; finalization computes canonical plan, review, source-evidence, and approval-payload hashes.")
+}
+
+write_intake_statistical_review <- function(study_dir, project_dir, route, replace_pending = FALSE) {
+  review_path <- file.path(study_dir, "statistician-review", "statistical-review.md"); plan_path <- analysis_plan_path(study_dir)
+  reject_legacy_analysis_artifacts(study_dir)
+  if (file.exists(review_path)) { current <- read_statistical_review(review_path); if (!isTRUE(replace_pending) || !identical(as.character(current$metadata$review_status), "pending")) stop("Only replace_pending=true may replace a pending review.") }
+  discovery <- intake_discover_mmrm_tfls(study_dir, project_dir); dir.create(dirname(review_path), recursive = TRUE, showWarnings = FALSE)
+  analysis_plan_write(analysis_plan_template(basename(normalizePath(study_dir, winslash = "/", mustWork = TRUE)), discovery$tfls), plan_path)
+  writeLines(intake_render_review(study_dir, project_dir, route, discovery), review_path, useBytes = TRUE)
+  trace_path <- file.path(study_dir, "backup-trace", "intake-mmrm-tfl-scan.md")
+  extraction_lines <- intake_extraction_trace_lines(discovery$manifest$rows)
+  trace_lines <- c(
+    "# Intake MMRM TFL 扫描记录", "",
+    paste0("已扫描文本材料数：", nrow(discovery$sources)),
+    paste0("明确 MMRM TFL 数：", length(discovery$tfls)), "",
+    "## 输入抽取审计", extraction_lines, "",
+    "## 发现的 TFL",
+    if (length(discovery$tfls)) vapply(discovery$tfls, function(x) paste0("- ", x$tfl_id, "：", x$title, "（", x$source_ref, "）"), character(1)) else "- 未发现明确 MMRM TFL。"
+  )
+  writeLines(trace_lines, trace_path, useBytes = TRUE)
+  list(review_path = review_path, analysis_plan_path = plan_path, trace_path = trace_path, tfl_count = length(discovery$tfls))
 }

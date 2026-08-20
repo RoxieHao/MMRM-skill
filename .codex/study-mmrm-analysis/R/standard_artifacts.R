@@ -96,7 +96,8 @@ standard_validate_output_manifest <- function(manifest) {
   invisible(TRUE)
 }
 
-standard_validate_analysis_artifacts <- function(paths, spec, contract, analysis, expected_invocation = NULL) {
+standard_validate_analysis_artifacts <- function(paths, chain, analysis, expected_invocation = NULL) {
+  contract <- chain$contract
   output_paths <- analysis_output_paths(paths, analysis$analysis_id)
   if (!file.exists(output_paths$run_record)) stop("missing analysis-run-record.csv: ", analysis$analysis_id)
   record <- standard_read_csv_schema(output_paths$run_record, standard_required_run_record_columns(), "run record")
@@ -105,15 +106,15 @@ standard_validate_analysis_artifacts <- function(paths, spec, contract, analysis
   expected_record <- c(
     study_id = as.character(contract$study$study_id), analysis_id = analysis$analysis_id,
     tfl_id = analysis$tfl_id, tfl_type = "table", title = analysis$title, scope_status = "approved",
-    profile_version = standard_mmrm_profile_version(),
-    specification_id = as.character(spec$metadata$specification_id),
-    specification_version = as.character(spec$metadata$specification_version)
+    profile_version = standard_mmrm_profile_version()
   )
   mismatch <- names(expected_record)[!vapply(names(expected_record), function(name) identical(scalar(name), expected_record[[name]]), logical(1))]
   if (length(mismatch)) stop("run record identity mismatch: ", paste(mismatch, collapse = ", "))
-  if (!identical(toupper(scalar("specification_sha256")), toupper(spec$sha256)) ||
-      !identical(toupper(scalar("contract_sha256")), toupper(attr(contract, "sha256")))) {
-    stop("run record specification/contract SHA mismatch.")
+  if (!identical(toupper(scalar("review_sha256")), toupper(chain$review$sha256)) ||
+      !identical(toupper(scalar("analysis_plan_sha256")), toupper(attr(chain$plan, "sha256"))) ||
+      !identical(toupper(scalar("approval_payload_sha256")), toupper(chain$approval_payload_sha256)) ||
+      !identical(toupper(scalar("contract_sha256")), toupper(chain$contract_sha256))) {
+    stop("run record approval-plan-contract identity mismatch.")
   }
   if (!nzchar(scalar("run_id")) || !nzchar(scalar("invocation_id"))) stop("run record run/invocation identity missing.")
   if (!is.null(expected_invocation) && !identical(scalar("invocation_id"), expected_invocation)) stop("run record invocation mismatch.")
@@ -156,8 +157,10 @@ standard_validate_analysis_artifacts <- function(paths, spec, contract, analysis
     is.na(diagnostics$profile_version) | as.character(diagnostics$profile_version) != standard_mmrm_profile_version() |
     is.na(diagnostics$run_id) | as.character(diagnostics$run_id) != scalar("run_id") |
     is.na(diagnostics$invocation_id) | as.character(diagnostics$invocation_id) != scalar("invocation_id") |
-    is.na(diagnostics$specification_sha256) | toupper(as.character(diagnostics$specification_sha256)) != toupper(spec$sha256) |
-    is.na(diagnostics$contract_sha256) | toupper(as.character(diagnostics$contract_sha256)) != toupper(attr(contract, "sha256"))
+    is.na(diagnostics$review_sha256) | toupper(as.character(diagnostics$review_sha256)) != toupper(chain$review$sha256) |
+    is.na(diagnostics$analysis_plan_sha256) | toupper(as.character(diagnostics$analysis_plan_sha256)) != toupper(attr(chain$plan, "sha256")) |
+    is.na(diagnostics$approval_payload_sha256) | toupper(as.character(diagnostics$approval_payload_sha256)) != toupper(chain$approval_payload_sha256) |
+    is.na(diagnostics$contract_sha256) | toupper(as.character(diagnostics$contract_sha256)) != toupper(chain$contract_sha256)
   if (any(diagnostic_mismatch)) stop("diagnostics identity mismatch.")
   if (any(!as.character(diagnostics$run_status) %in% standard_allowed_run_status()) ||
       any(!as.character(diagnostics$failure_domain) %in% standard_allowed_failure_domain()) ||
@@ -189,9 +192,8 @@ standard_validate_analysis_artifacts <- function(paths, spec, contract, analysis
       study_id = as.character(contract$study$study_id), analysis_id = analysis$analysis_id,
       group_id = as.character(diagnostics$analysis_group_id[[i]]),
       profile = standard_mmrm_profile_version(), profile_version = standard_mmrm_profile_version(),
-      specification_id = as.character(spec$metadata$specification_id),
-      specification_version = as.character(spec$metadata$specification_version),
-      specification_sha256 = toupper(spec$sha256), contract_sha256 = toupper(attr(contract, "sha256")),
+      review_sha256 = toupper(chain$review$sha256), analysis_plan_sha256 = toupper(attr(chain$plan, "sha256")),
+      approval_payload_sha256 = toupper(chain$approval_payload_sha256), contract_sha256 = toupper(chain$contract_sha256),
       adapter_sha256 = if (is.null(analysis$adapter_sha256)) "" else toupper(analysis$adapter_sha256),
       run_id = scalar("run_id"), invocation_id = scalar("invocation_id"),
       treatment_levels = if (is.null(analysis$treatment)) "" else paste(analysis$treatment$levels, collapse = "|"),
@@ -205,25 +207,56 @@ standard_validate_analysis_artifacts <- function(paths, spec, contract, analysis
     model_path <- standard_artifact_absolute(model_file, paths$project_dir, output_paths$root)
     standard_validate_model_rds(model_path, expected_identity, model_file)
   }
-  list(record = record, diagnostics = diagnostics, raw = raw, final = final)
+
+  if (!file.exists(output_paths$recode_audit)) stop("missing identity-bound recode audit artifact: ", analysis$analysis_id)
+  recode_audit <- standard_read_csv_schema(output_paths$recode_audit, names(standard_recode_audit_schema()), "recode audit")
+  expected_recode_ids <- if (is.null(analysis$derivations)) character() else vapply(analysis$derivations, function(d) as.character(d$id), character(1))
+  if (nrow(recode_audit)) {
+    recode_mismatch <-
+      is.na(recode_audit$study_id) | as.character(recode_audit$study_id) != as.character(contract$study$study_id) |
+      is.na(recode_audit$analysis_id) | as.character(recode_audit$analysis_id) != analysis$analysis_id |
+      is.na(recode_audit$profile_version) | as.character(recode_audit$profile_version) != standard_mmrm_profile_version() |
+      is.na(recode_audit$run_id) | as.character(recode_audit$run_id) != scalar("run_id") |
+      is.na(recode_audit$invocation_id) | as.character(recode_audit$invocation_id) != scalar("invocation_id") |
+      is.na(recode_audit$review_sha256) | toupper(as.character(recode_audit$review_sha256)) != toupper(chain$review$sha256) |
+      is.na(recode_audit$analysis_plan_sha256) | toupper(as.character(recode_audit$analysis_plan_sha256)) != toupper(attr(chain$plan, "sha256")) |
+      is.na(recode_audit$approval_payload_sha256) | toupper(as.character(recode_audit$approval_payload_sha256)) != toupper(chain$approval_payload_sha256) |
+      is.na(recode_audit$contract_sha256) | toupper(as.character(recode_audit$contract_sha256)) != toupper(chain$contract_sha256)
+    if (any(recode_mismatch)) stop("recode audit identity mismatch.")
+    if (anyDuplicated(as.character(recode_audit$recode_id))) stop("recode audit recode_id must be unique.")
+    if (any(!as.character(recode_audit$unmatched_policy) %in% c("error", "preserve", "set_missing")) ||
+        any(!as.character(recode_audit$missing_policy) %in% c("error", "preserve", "set_missing")) ||
+        any(!as.character(recode_audit$value_type) %in% c("character", "numeric", "logical"))) {
+      stop("recode audit policy/value_type invalid.")
+    }
+    count_columns <- c("input_count", "matched_count", "unmatched_count", "missing_count", "output_missing_count")
+    counts <- lapply(count_columns, function(name) suppressWarnings(as.integer(recode_audit[[name]])))
+    names(counts) <- count_columns
+    if (any(vapply(counts, function(x) any(is.na(x) | x < 0L), logical(1)))) stop("recode audit counts must be nonnegative integers.")
+    if (any(counts$matched_count + counts$unmatched_count + counts$missing_count != counts$input_count) ||
+        any(counts$matched_count + counts$unmatched_count > counts$input_count) ||
+        any(counts$output_missing_count > counts$input_count)) {
+      stop("recode audit aggregate counts are inconsistent.")
+    }
+  }
+  successful_recode <- scalar("output_status") %in% c("complete", "partial")
+  if (successful_recode && (!setequal(as.character(recode_audit$recode_id), expected_recode_ids) || nrow(recode_audit) != length(expected_recode_ids))) {
+    stop("recode audit must record each approved recode exactly once for a successful run: ", analysis$analysis_id)
+  }
+  if (nrow(recode_audit) && any(!as.character(recode_audit$recode_id) %in% expected_recode_ids)) stop("recode audit references an unapproved recode: ", analysis$analysis_id)
+
+  list(record = record, diagnostics = diagnostics, raw = raw, final = final, recode_audit = recode_audit)
 }
 
-run_standard_mmrm_collector <- function(script_file, pinned_specification_sha256, mode = "run-and-collect", fail_fast = NULL) {
+run_standard_mmrm_collector <- function(script_file, pinned_approval_payload_sha256, pinned_contract_sha256, mode = "run-and-collect", fail_fast = NULL) {
   if (!mode %in% c("run-and-collect", "collect-only")) stop("mode must be run-and-collect or collect-only.")
   if (!is.null(fail_fast) && (!is.logical(fail_fast) || length(fail_fast) != 1L || is.na(fail_fast))) stop("fail_fast must be true, false, or NULL.")
   project_dir <- find_project_dir(script_file)
   helper_dir <- file.path(project_dir, ".codex", "study-mmrm-analysis", "R")
-  source(file.path(helper_dir, "study_paths.R"), encoding = "UTF-8", local = environment())
-  source(file.path(helper_dir, "io.R"), encoding = "UTF-8", local = environment())
-  source(file.path(helper_dir, "specification.R"), encoding = "UTF-8", local = environment())
-  source(file.path(helper_dir, "standard_contract.R"), encoding = "UTF-8", local = environment())
-  source(file.path(helper_dir, "standard_engine.R"), encoding = "UTF-8", local = environment())
+  for (helper in c("study_paths.R", "io.R", "specification.R", "canonical_hash.R", "standard_contract.R", "standard_analysis_definition.R", "analysis_plan.R", "analysis_contract_generation.R", "analysis_approval.R", "standard_engine.R")) source(file.path(helper_dir, helper), encoding = "UTF-8", local = environment())
   paths <- study_paths(script_file)
-  spec <- assert_approved_specification(paths$analysis_specification_file, project_root = project_dir)
-  if (!identical(toupper(spec$sha256), toupper(pinned_specification_sha256))) stop("Specification SHA-256 changed; regenerate collector.")
-  contract_path <- normalize_project_relative_path(as.character(spec$metadata$execution_contract_file), project_dir, "execution_contract_file")
-  contract <- read_standard_mmrm_contract(contract_path)
-  if (!identical(toupper(attr(contract, "sha256")), toupper(as.character(spec$metadata$execution_contract_sha256)))) stop("Execution contract SHA-256 changed.")
+  chain <- assert_approved_analysis(paths$study_dir, project_dir, pinned_approval_payload_sha256 = pinned_approval_payload_sha256, pinned_contract_sha256 = pinned_contract_sha256)
+  contract <- chain$contract
   effective_fail_fast <- standard_resolve_fail_fast(contract, fail_fast)
   catalog <- standard_contract_catalog(contract)
   dir.create(paths$output_dir, recursive = TRUE, showWarnings = FALSE)
@@ -259,7 +292,7 @@ run_standard_mmrm_collector <- function(script_file, pinned_specification_sha256
       if (length(output)) cat(paste(output, collapse = "\n"), "\n", file = collector_log, append = TRUE)
       exit_status <- attr(output, "status")
       if (is.null(exit_status)) exit_status <- 0L
-      artifact <- tryCatch(standard_validate_analysis_artifacts(paths, spec, contract, analysis, expected_invocation), error = function(e) e)
+      artifact <- tryCatch(standard_validate_analysis_artifacts(paths, chain, analysis, expected_invocation), error = function(e) e)
       if (inherits(artifact, "error")) {
         notes[[analysis_id]] <- paste0("artifact validation failed: ", conditionMessage(artifact))
       } else {
@@ -274,7 +307,7 @@ run_standard_mmrm_collector <- function(script_file, pinned_specification_sha256
     add_log("collect-only: wrapper execution skipped")
     for (analysis_id in catalog$analysis_id) {
       analysis <- standard_contract_get_analysis(contract, analysis_id)
-      artifact <- tryCatch(standard_validate_analysis_artifacts(paths, spec, contract, analysis), error = function(e) e)
+      artifact <- tryCatch(standard_validate_analysis_artifacts(paths, chain, analysis), error = function(e) e)
       if (inherits(artifact, "error")) notes[[analysis_id]] <- paste0("artifact validation failed: ", conditionMessage(artifact)) else artifacts[[analysis_id]] <- artifact
     }
   }

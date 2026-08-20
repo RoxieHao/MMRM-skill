@@ -40,8 +40,8 @@ standard_final_result_schema <- function() {
 standard_diagnostic_schema <- function() {
   data.frame(
     invocation_id = character(), run_id = character(), study_id = character(), analysis_id = character(),
-    analysis_group_id = character(), profile_version = character(), specification_sha256 = character(),
-    contract_sha256 = character(), covariance_path = character(), final_covariance = character(),
+    analysis_group_id = character(), profile_version = character(), review_sha256 = character(),
+    analysis_plan_sha256 = character(), approval_payload_sha256 = character(), contract_sha256 = character(), covariance_path = character(), final_covariance = character(),
     fallback_used = character(), convergence_status = character(), inference_complete = character(),
     failure_domain = character(), failure_phase = character(), computational_risk = character(),
     risk_reason = character(), warning_summary = character(),
@@ -52,11 +52,40 @@ standard_diagnostic_schema <- function() {
   )
 }
 
+standard_recode_audit_schema <- function() {
+  data.frame(
+    invocation_id = character(), run_id = character(), study_id = character(), analysis_id = character(),
+    profile_version = character(), review_sha256 = character(), analysis_plan_sha256 = character(),
+    approval_payload_sha256 = character(), contract_sha256 = character(),
+    recode_id = character(), source_variable = character(), target_variable = character(), value_type = character(),
+    input_count = integer(), matched_count = integer(), unmatched_count = integer(), missing_count = integer(),
+    output_missing_count = integer(), unmatched_policy = character(), missing_policy = character(),
+    stringsAsFactors = FALSE
+  )
+}
+
+# Build an identity-bound aggregate recode audit from derivation diagnostics. Only aggregate
+# match/missing/policy counts are retained; no subject-level or per-value data is persisted.
+standard_build_recode_audit <- function(derivation_diagnostics, identity) {
+  if (!is.list(derivation_diagnostics) || !length(derivation_diagnostics)) return(standard_recode_audit_schema())
+  do.call(rbind, lapply(derivation_diagnostics, function(d) {
+    data.frame(
+      invocation_id = identity$invocation_id, run_id = identity$run_id, study_id = identity$study_id, analysis_id = identity$analysis_id,
+      profile_version = identity$profile_version, review_sha256 = identity$review_sha256, analysis_plan_sha256 = identity$analysis_plan_sha256,
+      approval_payload_sha256 = identity$approval_payload_sha256, contract_sha256 = identity$contract_sha256,
+      recode_id = as.character(d$id), source_variable = as.character(d$source_variable), target_variable = as.character(d$target_variable),
+      value_type = as.character(d$value_type), input_count = as.integer(d$input_count), matched_count = as.integer(d$matched_count),
+      unmatched_count = as.integer(d$unmatched_count), missing_count = as.integer(d$missing_count), output_missing_count = as.integer(d$output_missing_count),
+      unmatched_policy = as.character(d$unmatched_policy), missing_policy = as.character(d$missing_policy), stringsAsFactors = FALSE
+    )
+  }))
+}
+
 standard_run_record_schema <- function() {
   data.frame(
     invocation_id = character(), run_id = character(), study_id = character(), analysis_id = character(),
-    profile_version = character(), specification_id = character(), specification_version = character(),
-    specification_sha256 = character(), contract_sha256 = character(), tfl_id = character(),
+    profile_version = character(), review_sha256 = character(), analysis_plan_sha256 = character(),
+    approval_payload_sha256 = character(), contract_sha256 = character(), tfl_id = character(),
     tfl_type = character(), title = character(), scope_status = character(), output_status = character(),
     computational_risk = character(), raw_output_file = character(), final_tfl_file = character(),
     diagnostic_file = character(), diagnostic_report = character(), log_file = character(),
@@ -86,6 +115,38 @@ standard_apply_predicate <- function(data, predicate) {
   )
   keep[is.na(keep)] <- FALSE
   keep
+}
+
+standard_recode_count_list <- function(values) {
+  labels <- ifelse(is.na(values), "<MISSING>", ifelse(is.character(values) & !nzchar(trimws(values)), "<BLANK>", as.character(values)))
+  counts <- table(labels, useNA = "no")
+  as.list(setNames(as.integer(counts), names(counts)))
+}
+
+standard_apply_derivations <- function(data, derivations) {
+  if (!length(derivations)) { attr(data, "derivation_diagnostics") <- list(); return(data) }
+  diagnostics <- list()
+  for (i in seq_along(derivations)) {
+    ir <- standard_normalize_recode(derivations[[i]])
+    source <- data[[ir$source_variable]]
+    if (is.null(source)) stop("PLAN-DERIVATION-RUNTIME: source variable missing: ", ir$source_variable)
+    if (ir$target_variable %in% names(data)) stop("PLAN-DERIVATION-RUNTIME: target variable already exists: ", ir$target_variable)
+    observed <- source[!is.na(source)]
+    if (length(observed) && !identical(standard_recode_value_family(observed[[1L]]), ir$value_type)) stop("PLAN-DERIVATION-RUNTIME: source type differs from approved normalized recode type in ", ir$id)
+    target <- switch(ir$value_type, character = rep(NA_character_, length(source)), numeric = rep(NA_real_, length(source)), logical = rep(NA, length(source)), stop("PLAN-DERIVATION-RUNTIME: unsupported normalized type."))
+    matched <- rep(FALSE, length(source)); missing <- is.na(source) | (is.character(source) & !nzchar(trimws(source)))
+    for (level in ir$levels) { hit <- !missing & source %in% unlist(level$source_values, use.names = FALSE); target[hit] <- level$target_value; matched <- matched | hit }
+    unmatched <- !missing & !matched
+    if (any(unmatched) && ir$unmatched == "error") stop("PLAN-DERIVATION-RUNTIME: unmatched values in ", ir$id)
+    if (any(missing) && ir$missing == "error") stop("PLAN-DERIVATION-RUNTIME: missing values in ", ir$id)
+    if (ir$unmatched == "preserve") target[unmatched] <- source[unmatched]
+    if (ir$missing == "preserve") target[missing] <- source[missing]
+    data[[ir$target_variable]] <- target
+    output_missing <- is.na(target) | (is.character(target) & !nzchar(trimws(target)))
+    diagnostics[[ir$id]] <- list(id = ir$id, source_variable = ir$source_variable, target_variable = ir$target_variable, value_type = ir$value_type, input_count = length(source), matched_count = sum(matched), unmatched_count = sum(unmatched), missing_count = sum(missing), output_missing_count = sum(output_missing), unmatched_policy = ir$unmatched, missing_policy = ir$missing, input_value_counts = standard_recode_count_list(source), output_value_counts = standard_recode_count_list(target))
+  }
+  attr(data, "derivation_diagnostics") <- diagnostics
+  data
 }
 
 standard_filter_rows <- function(data, predicates) {
@@ -120,6 +181,8 @@ standard_prepare_analysis_data <- function(raw, analysis, project_dir) {
     raw <- as.data.frame(raw, stringsAsFactors = FALSE, check.names = FALSE)
   }
   input_rows <- nrow(raw)
+  raw <- standard_apply_derivations(raw, if (is.null(analysis$derivations)) list() else analysis$derivations)
+  derivation_diagnostics <- attr(raw, "derivation_diagnostics")
   filtered <- standard_filter_rows(raw, analysis$filters)
   population_filtered_rows <- nrow(filtered)
   filtered$.standard_source_row_id <- seq_len(nrow(filtered))
@@ -128,17 +191,17 @@ standard_prepare_analysis_data <- function(raw, analysis, project_dir) {
   missing_columns <- setdiff(required_variables, names(filtered))
   if (length(missing_columns)) stop("mapping variables missing: ", paste(missing_columns, collapse = ", "))
 
-  endpoint_mapping_error <- function(...) stop("ENDPOINT_MAPPING: ", paste0(..., collapse = ""))
+  endpoint_allocation_error <- function(...) stop("PLAN-ENDPOINT-ALLOCATION: ", paste0(..., collapse = ""))
   group_selections <- lapply(analysis$groups, function(group) {
     definitions <- Filter(function(definition) identical(definition$group_id, group$id), analysis$endpoint_definitions)
-    if (length(definitions) != 1L) endpoint_mapping_error("group ", group$id, " must have exactly one endpoint_definition.")
+    if (length(definitions) != 1L) endpoint_allocation_error("group ", group$id, " must have exactly one endpoint_definition.")
     definition <- definitions[[1L]]
     dimensions <- definition$dimensions
     applicable_dimensions <- Filter(function(dimension) !dimension$variable %in% c("not_applicable", "fixed"), dimensions)
     required_endpoint_columns <- c(as.character(definition$endpoint_variable), vapply(applicable_dimensions, function(dimension) as.character(dimension$variable), character(1)))
     missing_endpoint_columns <- setdiff(required_endpoint_columns, names(filtered))
     if (length(missing_endpoint_columns)) {
-      endpoint_mapping_error("group ", group$id, " endpoint/dimension variables missing: ", paste(missing_endpoint_columns, collapse = ", "))
+      endpoint_allocation_error("group ", group$id, " endpoint/dimension variables missing: ", paste(missing_endpoint_columns, collapse = ", "))
     }
 
     group_data <- standard_filter_rows(filtered, group$predicates)
@@ -148,7 +211,7 @@ standard_prepare_analysis_data <- function(raw, analysis, project_dir) {
       observed <- as.character(group_data[[variable]][!is.na(group_data[[variable]])])
       unapproved <- setdiff(unique(observed), as.character(dimension$values))
       if (length(unapproved)) {
-        endpoint_mapping_error("group ", group$id, " endpoint dimension ", dimension_name, " (", variable,
+        endpoint_allocation_error("group ", group$id, " endpoint dimension ", dimension_name, " (", variable,
           ") contains unapproved values: ", paste(unapproved, collapse = ", "))
       }
     }
@@ -162,7 +225,7 @@ standard_prepare_analysis_data <- function(raw, analysis, project_dir) {
     allocations <- vapply(duplicate_source_rows, function(source_row_id) {
       paste0(source_row_id, "=[", paste(allocation$group_id[allocation$source_row_id == source_row_id], collapse = ", "), "]")
     }, character(1))
-    endpoint_mapping_error("source row allocated to multiple groups: ", paste(allocations, collapse = "; "))
+    endpoint_allocation_error("source row allocated to multiple groups: ", paste(allocations, collapse = "; "))
   }
 
   pieces <- lapply(group_selections, function(selection) {
@@ -217,6 +280,7 @@ standard_prepare_analysis_data <- function(raw, analysis, project_dir) {
     data$treatment_f <- factor(data$treatment, levels = approved_levels)
   }
   attr(data, "input_rows") <- input_rows
+  attr(data, "derivation_diagnostics") <- derivation_diagnostics
   attr(data, "population_filtered_rows") <- population_filtered_rows
   attr(data, "missing_required_rows") <- missing_required_rows
   data
@@ -496,7 +560,7 @@ standard_sas_status <- function(analysis) {
   "template_generated_not_executed\uff1a\u5df2\u751f\u6210\u53ea\u8bfb SAS \u6a21\u677f\uff0c\u9ed8\u8ba4\u4e0d\u6267\u884c\u3002"
 }
 
-standard_write_report <- function(path, analysis, diagnostics, status, risk, spec, contract_sha, output_paths = NULL, project_dir = NULL) {
+standard_write_report <- function(path, analysis, diagnostics, status, risk, chain, output_paths = NULL, project_dir = NULL) {
   rel <- function(value) {
     if (is.null(value) || is.null(project_dir) || !nzchar(value)) return("")
     project_relative_path(value, project_dir)
@@ -511,12 +575,13 @@ standard_write_report <- function(path, analysis, diagnostics, status, risk, spe
   lines <- c(
     "# Standard MMRM \u8fd0\u884c\u8bca\u65ad\u62a5\u544a", "",
     "## \u57fa\u672c\u4fe1\u606f", "",
-    paste0("- Study ID\uff1a`", spec$metadata$study_id, "`"),
+    paste0("- Study ID\uff1a`", chain$contract$study$study_id, "`"),
     paste0("- Analysis ID\uff1a`", analysis$analysis_id, "`"),
     paste0("- TFL ID\uff1a`", analysis$tfl_id, "`"),
-    paste0("- \u6570\u636e\u7c7b\u522b\uff1a`", spec$metadata$data_classification, "`\uff1b\u7528\u9014\uff1a`", spec$metadata$intended_use, "`"),
-    paste0("- Specification\uff1a`", spec$metadata$specification_id, "` v", spec$metadata$specification_version),
-    paste0("- Contract SHA-256\uff1a`", toupper(contract_sha), "`"), "",
+    paste0("- \u6570\u636e\u7c7b\u522b\uff1a`", chain$plan$execution_context$data_classification, "`\uff1b\u7528\u9014\uff1a`", chain$plan$execution_context$intended_use, "`"),
+    paste0("- Analysis plan SHA-256\uff1a`", toupper(attr(chain$plan, "sha256")), "`"),
+    paste0("- Approval payload SHA-256\uff1a`", toupper(chain$approval_payload_sha256), "`"),
+    paste0("- Contract SHA-256\uff1a`", toupper(chain$contract_sha256), "`"), "",
     "## \u6a21\u578b\u6267\u884c", "",
     paste0("- Primary covariance\uff1a`", primary_covariance, "`"),
     paste0("- Fallback \u987a\u5e8f\uff1a`", fallback_covariance, "`"),
@@ -541,40 +606,28 @@ standard_write_report <- function(path, analysis, diagnostics, status, risk, spe
   writeLines(lines, path, useBytes = TRUE)
 }
 
-run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_specification_sha256,
-                                             stage, exchange_path, marker_path,
+run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_approval_payload_sha256,
+                                             pinned_contract_sha256, stage, exchange_path, marker_path,
                                              run_id, invocation_id) {
   stage <- match.arg(stage, c("prepare", "fit"))
   project_dir <- find_project_dir(script_file)
   helper_dir <- file.path(project_dir, ".codex", "study-mmrm-analysis", "R")
-  source(file.path(helper_dir, "study_paths.R"), encoding = "UTF-8", local = environment())
-  source(file.path(helper_dir, "io.R"), encoding = "UTF-8", local = environment())
-  source(file.path(helper_dir, "specification.R"), encoding = "UTF-8", local = environment())
-  source(file.path(helper_dir, "standard_contract.R"), encoding = "UTF-8", local = environment())
-  source(file.path(helper_dir, "runtime_dataset_binding.R"), encoding = "UTF-8", local = environment())
+  for (helper in c("study_paths.R", "io.R", "specification.R", "canonical_hash.R", "standard_contract.R", "standard_analysis_definition.R", "analysis_plan.R", "analysis_contract_generation.R", "analysis_approval.R", "runtime_dataset_binding.R")) source(file.path(helper_dir, helper), encoding = "UTF-8", local = environment())
   paths <- study_paths(script_file)
 
   preflight_domain <- "approval"
-  preflight_phase <- "approved_specification_gate"
+  preflight_phase <- "approved_analysis_chain_gate"
   preflight <- tryCatch({
-    spec <- assert_approved_specification(paths$analysis_specification_file, expected_analysis_id = analysis_id, project_root = project_dir)
-    if (!identical(toupper(spec$sha256), toupper(pinned_specification_sha256))) stop("Specification SHA-256 changed; regenerate wrapper.")
-    assert_specification_execution_allowed(spec)
-    preflight_domain <- "contract"
-    preflight_phase <- "typed_contract_gate"
-    source_standard_contract_helper(project_dir)
-    contract_path <- normalize_project_relative_path(as.character(spec$metadata$execution_contract_file), project_dir, "execution_contract_file")
-    contract <- read_standard_mmrm_contract(contract_path)
-    contract_sha <- attr(contract, "sha256")
-    if (!identical(toupper(contract_sha), toupper(as.character(spec$metadata$execution_contract_sha256)))) stop("Execution contract SHA-256 changed.")
-    analysis <- standard_contract_get_analysis(contract, analysis_id)
-    list(spec = spec, contract = contract, contract_sha = contract_sha, analysis = analysis)
+    chain <- assert_approved_analysis(paths$study_dir, project_dir, expected_analysis_id = analysis_id, pinned_approval_payload_sha256 = pinned_approval_payload_sha256, pinned_contract_sha256 = pinned_contract_sha256)
+    assert_analysis_execution_allowed(chain)
+    analysis <- standard_contract_get_analysis(chain$contract, analysis_id)
+    list(chain = chain, contract = chain$contract, contract_sha = chain$contract_sha256, analysis = analysis)
   }, error = function(e) e)
   if (inherits(preflight, "error")) {
     stop("Standard MMRM preflight failed [", preflight_domain, "/", preflight_phase, "]: ", conditionMessage(preflight))
   }
 
-  spec <- preflight$spec
+  chain <- preflight$chain
   contract <- preflight$contract
   contract_sha <- preflight$contract_sha
   analysis <- preflight$analysis
@@ -621,7 +674,9 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_sp
       exchange <- list(
         schema_version = "1.0",
         analysis_id = analysis_id,
-        specification_sha256 = toupper(spec$sha256),
+        review_sha256 = toupper(chain$review$sha256),
+        analysis_plan_sha256 = toupper(attr(chain$plan, "sha256")),
+        approval_payload_sha256 = toupper(chain$approval_payload_sha256),
         contract_sha256 = toupper(contract_sha),
         run_id = run_id,
         invocation_id = invocation_id,
@@ -635,11 +690,13 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_sp
     failure_phase <- "prepared_exchange_gate"
     if (!file.exists(marker_path) || !file.exists(exchange_path)) stop("Prepared MMRM stage exchange is incomplete.")
     exchange <- readRDS(exchange_path)
-    required_exchange <- c("schema_version", "analysis_id", "specification_sha256", "contract_sha256", "run_id", "invocation_id", "prepared")
+    required_exchange <- c("schema_version", "analysis_id", "review_sha256", "analysis_plan_sha256", "approval_payload_sha256", "contract_sha256", "run_id", "invocation_id", "prepared")
     if (!is.list(exchange) || any(!required_exchange %in% names(exchange))) stop("Prepared MMRM stage exchange schema is invalid.")
     if (!identical(exchange$schema_version, "1.0")) stop("Prepared MMRM stage exchange version is unsupported.")
     identity_ok <- identical(exchange$analysis_id, analysis_id) &&
-      identical(toupper(exchange$specification_sha256), toupper(spec$sha256)) &&
+      identical(toupper(exchange$review_sha256), toupper(chain$review$sha256)) &&
+      identical(toupper(exchange$analysis_plan_sha256), toupper(attr(chain$plan, "sha256"))) &&
+      identical(toupper(exchange$approval_payload_sha256), toupper(chain$approval_payload_sha256)) &&
       identical(toupper(exchange$contract_sha256), toupper(contract_sha)) &&
       identical(exchange$run_id, run_id) && identical(exchange$invocation_id, invocation_id)
     if (!identity_ok) stop("Prepared MMRM stage exchange identity does not match this run.")
@@ -680,9 +737,8 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_sp
           artifact_identity = list(
             study_id = as.character(contract$study$study_id), analysis_id = analysis_id, group_id = group_id,
             profile = standard_mmrm_profile_version(), profile_version = standard_mmrm_profile_version(),
-            specification_id = as.character(spec$metadata$specification_id),
-            specification_version = as.character(spec$metadata$specification_version),
-            specification_sha256 = toupper(spec$sha256), contract_sha256 = toupper(contract_sha),
+            review_sha256 = toupper(chain$review$sha256), analysis_plan_sha256 = toupper(attr(chain$plan, "sha256")),
+            approval_payload_sha256 = toupper(chain$approval_payload_sha256), contract_sha256 = toupper(contract_sha),
             adapter_sha256 = if (is.null(analysis$adapter_sha256)) "" else toupper(analysis$adapter_sha256),
             run_id = run_id, invocation_id = invocation_id
           )
@@ -703,7 +759,8 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_sp
       data.frame(
         invocation_id = invocation_id, run_id = run_id, study_id = contract$study$study_id,
         analysis_id = analysis_id, analysis_group_id = group_id, profile_version = standard_mmrm_profile_version(),
-        specification_sha256 = toupper(spec$sha256), contract_sha256 = toupper(contract_sha),
+        review_sha256 = toupper(chain$review$sha256), analysis_plan_sha256 = toupper(attr(chain$plan, "sha256")),
+        approval_payload_sha256 = toupper(chain$approval_payload_sha256), contract_sha256 = toupper(contract_sha),
         covariance_path = if (failed) "not_fitted" else item$covariance_path,
         final_covariance = if (failed) "" else item$final_covariance,
         fallback_used = if (failed) "no" else item$fallback_used,
@@ -731,7 +788,9 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_sp
       exchange <- list(
         schema_version = "1.0",
         analysis_id = analysis_id,
-        specification_sha256 = toupper(spec$sha256),
+        review_sha256 = toupper(chain$review$sha256),
+        analysis_plan_sha256 = toupper(attr(chain$plan, "sha256")),
+        approval_payload_sha256 = toupper(chain$approval_payload_sha256),
         contract_sha256 = toupper(contract_sha),
         run_id = run_id,
         invocation_id = invocation_id,
@@ -741,7 +800,7 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_sp
       publish_exchange(exchange)
       return(invisible(list(stage = "prepare", error = conditionMessage(e))))
     }
-    if (grepl("ENDPOINT_MAPPING:", conditionMessage(e), fixed = TRUE)) {
+    if (grepl("PLAN-DERIVATION|PLAN-ENDPOINT-ALLOCATION", conditionMessage(e), ignore.case = TRUE)) {
       failure_domain <- "data_mapping"
       failure_phase <- "endpoint_allocation_gate"
     }
@@ -751,7 +810,8 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_sp
     diagnostics <- standard_diagnostic_schema()[0, ]
     diagnostics[1, ] <- data.frame(
       invocation_id = invocation_id, run_id = run_id, study_id = as.character(contract$study$study_id), analysis_id = analysis_id,
-      analysis_group_id = "ALL", profile_version = standard_mmrm_profile_version(), specification_sha256 = toupper(spec$sha256),
+      analysis_group_id = "ALL", profile_version = standard_mmrm_profile_version(), review_sha256 = toupper(chain$review$sha256),
+      analysis_plan_sha256 = toupper(attr(chain$plan, "sha256")), approval_payload_sha256 = toupper(chain$approval_payload_sha256),
       contract_sha256 = toupper(contract_sha), covariance_path = "not_fitted", final_covariance = "", fallback_used = "no",
       convergence_status = "not_assessed", inference_complete = "no", failure_domain = failure_domain,
       failure_phase = failure_phase, computational_risk = risk, risk_reason = conditionMessage(e), warning_summary = "",
@@ -768,8 +828,17 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_sp
   write_utf8_bom_csv(outcome$raw, raw_path)
   write_utf8_bom_csv(outcome$final, final_path)
   write_utf8_bom_csv(outcome$diagnostics, output_paths$diagnostic_csv)
+  recode_identity <- list(
+    invocation_id = invocation_id, run_id = run_id, study_id = as.character(contract$study$study_id), analysis_id = analysis_id,
+    profile_version = standard_mmrm_profile_version(), review_sha256 = toupper(chain$review$sha256),
+    analysis_plan_sha256 = toupper(attr(chain$plan, "sha256")), approval_payload_sha256 = toupper(chain$approval_payload_sha256),
+    contract_sha256 = toupper(contract_sha)
+  )
+  recode_diagnostics <- if (is.null(prepared_data)) list() else attr(prepared_data, "derivation_diagnostics")
+  if (is.null(recode_diagnostics)) recode_diagnostics <- list()
+  write_utf8_bom_csv(standard_build_recode_audit(recode_diagnostics, recode_identity), output_paths$recode_audit)
   report_error <- tryCatch({
-    standard_write_report(output_paths$diagnostic_report, analysis, outcome$diagnostics, outcome$status, outcome$risk, spec, contract_sha, output_paths, project_dir)
+    standard_write_report(output_paths$diagnostic_report, analysis, outcome$diagnostics, outcome$status, outcome$risk, chain, output_paths, project_dir)
     NULL
   }, error = function(e) e)
   if (inherits(report_error, "error")) {
@@ -779,7 +848,7 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_sp
   record <- standard_run_record_schema()[0, ]
   record[1, ] <- list(
     invocation_id, run_id, as.character(contract$study$study_id), analysis_id, standard_mmrm_profile_version(),
-    as.character(spec$metadata$specification_id), as.character(spec$metadata$specification_version), toupper(spec$sha256),
+    toupper(chain$review$sha256), toupper(attr(chain$plan, "sha256")), toupper(chain$approval_payload_sha256),
     toupper(contract_sha), analysis$tfl_id, "table", analysis$title, "approved", outcome$status, outcome$risk,
     project_relative_path(raw_path, project_dir), project_relative_path(final_path, project_dir),
     project_relative_path(output_paths$diagnostic_csv, project_dir), project_relative_path(output_paths$diagnostic_report, project_dir),
@@ -820,7 +889,7 @@ standard_write_stage_launcher <- function(path, rscript, runner, stage_arguments
   invisible(path)
 }
 
-run_standard_mmrm_analysis <- function(script_file, analysis_id, pinned_specification_sha256) {
+run_standard_mmrm_analysis <- function(script_file, analysis_id, pinned_approval_payload_sha256, pinned_contract_sha256) {
   project_dir <- find_project_dir(script_file)
   runner <- file.path(project_dir, ".codex", "study-mmrm-analysis", "scripts", "run_standard_mmrm_stage.R")
   if (!file.exists(runner)) stop("Standard MMRM stage runner is missing: ", runner)
@@ -844,7 +913,8 @@ run_standard_mmrm_analysis <- function(script_file, analysis_id, pinned_specific
   stage_arguments <- c(
     paste0("--script-file=", normalizePath(script_file, winslash = "/", mustWork = TRUE)),
     paste0("--analysis-id=", analysis_id),
-    paste0("--specification-sha256=", pinned_specification_sha256),
+    paste0("--approval-payload-sha256=", pinned_approval_payload_sha256),
+    paste0("--contract-sha256=", pinned_contract_sha256),
     paste0("--exchange=", normalizePath(exchange_path, winslash = "/", mustWork = FALSE)),
     paste0("--marker=", normalizePath(marker_path, winslash = "/", mustWork = FALSE)),
     paste0("--run-id=", run_id),

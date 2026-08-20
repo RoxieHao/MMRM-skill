@@ -29,7 +29,7 @@ self_check <- parse_logical_arg(get_arg("self-check", required = FALSE, default 
 if (self_check) {
   project_dir <- find_project_root(getwd())
   skill_dir <- file.path(project_dir, ".codex", "study-mmrm-analysis")
-  for (helper in c("io.R", "specification.R", "endpoint_mapping.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R", "review_finalization.R")) {
+  for (helper in c("canonical_hash.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R", "review_finalization.R")) {
     source(file.path(skill_dir, "R", helper), encoding = "UTF-8")
   }
   review_finalization_self_check()
@@ -40,7 +40,7 @@ if (self_check) {
 study_dir <- normalizePath(get_arg("study-dir"), winslash = "/", mustWork = TRUE)
 project_dir <- find_project_root(study_dir)
 skill_dir <- file.path(project_dir, ".codex", "study-mmrm-analysis")
-for (helper in c("io.R", "specification.R", "endpoint_mapping.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R", "review_finalization.R")) {
+for (helper in c("canonical_hash.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R", "review_finalization.R")) {
   source(file.path(skill_dir, "R", helper), encoding = "UTF-8")
 }
 
@@ -57,21 +57,25 @@ result_path <- get_arg("result-file", required = FALSE, default = review_finaliz
 result <- tryCatch(
   finalize_statistical_review(study_dir, source_review, target_review, allow_unresolved = allow_unresolved),
   error = function(e) {
-    issue <- review_finalize_issue("ALL", "finalization", conditionMessage(e), "successful finalization", "Correct the reported finalization error and run finalization again.")
+    issue <- review_finalize_issue_frame("PLAN-SCHEMA-FINALIZATION", "ALL", "finalization", conditionMessage(e), "successful analysis-plan finalization", "Correct the reported finalization error and run finalization again.")
     list(
-      target_review = normalizePath(target_review, winslash = "/", mustWork = FALSE), mapping_count = 0L, issue_count = 1L,
-      ready_for_final_signature = FALSE, issues = review_finalize_normalize_issues(list(issue)), report = conditionMessage(e), published = FALSE
+      target_review = normalizePath(target_review, winslash = "/", mustWork = FALSE), analysis_count = 0L, issue_count = 1L,
+      ready_for_final_signature = FALSE, issues = issue, report = conditionMessage(e), published = FALSE
     )
   }
 )
 result_artifact <- review_finalization_write_result(result_path, result, source_review, target_review)
 cat("Finalization result artifact: ", result_artifact, "\n", sep = "")
-if (!isTRUE(result$published)) {
+if (!isTRUE(result$ready_for_final_signature)) {
   cat(result$report, "\n", sep = "")
-  cat("No review, mapping, or manifest files were changed.\n")
+  if (isTRUE(result$published)) {
+    cat("Published a non-signable review with generated Section 7 issues; resolve them and finalize again before signature.\n")
+  } else {
+    cat("No review, analysis plan, or manifest files were changed.\n")
+  }
   quit(status = 2)
 }
 cat("Finalized statistical review: ", result$target_review, "\n", sep = "")
-cat("Endpoint Mapping rows: ", result$mapping_count, "\n", sep = "")
+cat("Analysis definitions: ", result$analysis_count, "\n", sep = "")
 cat("Review issues: ", result$issue_count, "\n", sep = "")
 cat("Ready for final signature: ", if (isTRUE(result$ready_for_final_signature)) "true" else "false", "\n", sep = "")

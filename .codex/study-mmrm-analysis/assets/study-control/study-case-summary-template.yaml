@@ -1,6 +1,9 @@
 schema_version: standard-mmrm-case-summary/v1
 study_id: STUDY-ID
 profile_version: standard-mmrm-profile/v1
+review_sha256: REPLACE_WITH_REVIEW_SHA256
+analysis_plan_sha256: REPLACE_WITH_ANALYSIS_PLAN_SHA256
+approval_payload_sha256: REPLACE_WITH_APPROVAL_PAYLOAD_SHA256
 contract_sha256: REPLACE_WITH_CONTRACT_SHA256
 analysis_catalog: []
 run_records: []
