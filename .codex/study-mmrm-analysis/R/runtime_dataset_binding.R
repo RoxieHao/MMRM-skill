@@ -1,7 +1,7 @@
 # 审批前受控运行数据集绑定：候选发现、确认解析和 manifest 提升。
 # 依赖 io.R、intake_review.R（用于读取 manifest）和 intake_extraction.R（用于 SHA helper）。
 
-runtime_dataset_supported_formats <- function() c("csv", "sas7bdat", "rds")
+runtime_dataset_supported_formats <- function() c("csv", "sas7bdat")
 
 runtime_dataset_file_sha256 <- function(path) {
   if (!requireNamespace("digest", quietly = TRUE)) stop("digest package is required to validate runtime dataset binding.")
@@ -16,7 +16,6 @@ runtime_dataset_read_schema <- function(path, format) {
       format,
       sas7bdat = { if (!requireNamespace("haven", quietly = TRUE)) stop("缺少 haven，无法读取 sas7bdat。") ; haven::read_sas(path, n_max = 0) },
       csv = utils::read.csv(path, nrows = 0L, check.names = FALSE, fileEncoding = "UTF-8-BOM"),
-      rds = readRDS(path),
       stop("不支持的运行数据格式：", format)
     )
     if (!is.data.frame(data)) stop("运行数据必须读取为 data.frame。")
@@ -31,7 +30,6 @@ runtime_dataset_read_paramcd <- function(path, format, columns) {
       format,
       sas7bdat = haven::read_sas(path, col_select = "PARAMCD"),
       csv = read_utf8_bom_csv(path),
-      rds = readRDS(path),
       stop("unsupported format")
     )
     if (!is.data.frame(data) || !"PARAMCD" %in% names(data)) return(character())
@@ -69,10 +67,10 @@ runtime_dataset_binding_text <- function(item, prefix = "Runtime dataset candida
 
 runtime_dataset_parse_binding <- function(value) {
   value <- trimws(as.character(value))
-  pattern <- "file=([^;|[:space:]]+);\\s*format=(csv|sas7bdat|rds);\\s*relative_path=([^;|[:space:]]+);\\s*sha256=([A-Fa-f0-9]{64})"
+  pattern <- "file=([^;|[:space:]]+);\\s*format=(csv|sas7bdat);\\s*relative_path=([^;|[:space:]]+);\\s*sha256=([A-Fa-f0-9]{64})"
   match <- regmatches(value, regexec(pattern, value, ignore.case = TRUE, perl = TRUE))[[1]]
   if (length(match) != 5L) return(NULL)
-  list(file = match[[2]], format = tolower(match[[3]]), relative_path = gsub("\\\\", "/", match[[4]]), sha256 = toupper(match[[5]]))
+  list(binding_mode = "linked", file = match[[2]], format = tolower(match[[3]]), relative_path = gsub("\\\\", "/", match[[4]]), sha256 = toupper(match[[5]]))
 }
 
 runtime_dataset_binding_matches <- function(binding, item) {
@@ -101,6 +99,7 @@ runtime_dataset_promote_binding <- function(study_dir, project_dir, bindings) {
   manifest$relative_path <- gsub("\\\\", "/", trimws(as.character(manifest$relative_path)))
   if (anyDuplicated(tolower(manifest$relative_path))) stop("input-manifest.csv 的 relative_path 必须唯一，不能提升重复记录。")
   for (binding in bindings) {
+    if (!is.list(binding) || !identical(binding$binding_mode, "linked")) stop("PLAN-SCHEMA-DATASET-BINDING-RUNTIME: runtime_dataset_promote_binding only accepts linked bindings.")
     index <- which(manifest$relative_path == binding$relative_path & as.character(manifest$file_name) == binding$file)
     if (length(index) != 1L) stop("无法唯一定位待提升的 manifest 记录：", binding$relative_path)
     if (runtime_dataset_format(binding$file) != binding$format) stop("确认 binding 的 file/format 不一致：", binding$file)

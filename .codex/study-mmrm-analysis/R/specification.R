@@ -8,7 +8,9 @@ markdown_table_split_row <- function(line, context = "Markdown table") {
 }
 markdown_table_separator_valid <- function(line, count) { cells <- markdown_table_split_row(line, "Markdown separator"); length(cells) == count && all(grepl("^:?-{3,}:?$", cells)) }
 parse_statistical_review_table <- function(section_lines, expected_columns, section_name) {
-  lines <- which(grepl("^\\s*\\|", section_lines)); if (!length(lines)) stop(section_name, " missing Markdown table."); blocks <- split(lines, cumsum(c(TRUE, diff(lines) != 1L))); if (length(blocks) != 1L) stop(section_name, " must contain exactly one table.")
+  lines <- which(grepl("^\\s*\\|", section_lines)); if (!length(lines)) stop(section_name, " missing Markdown table.")
+  blocks <- split(lines, cumsum(c(TRUE, diff(lines) != 1L)))
+  if (length(blocks) != 1L) stop(section_name, " contains an additional or interrupted Markdown table. Keep each review value on one physical line, use <br> for line breaks, and do not add tables inside a candidate section.")
   block <- section_lines[blocks[[1]]]; header <- markdown_table_split_row(block[[1]], paste0(section_name, " header")); if (!identical(header, expected_columns) || length(block) < 2L || !markdown_table_separator_valid(block[[2]], length(header))) stop(section_name, " schema mismatch.")
   rows <- lapply(block[-c(1L, 2L)], markdown_table_split_row, context = section_name); if (!length(rows)) return(as.data.frame(setNames(rep(list(character()), length(expected_columns)), expected_columns), stringsAsFactors = FALSE, check.names = FALSE)); if (any(vapply(rows, length, integer(1)) != length(expected_columns))) stop(section_name, " row width mismatch.")
   result <- as.data.frame(do.call(rbind, rows), stringsAsFactors = FALSE, check.names = FALSE); names(result) <- expected_columns; result
@@ -70,10 +72,4 @@ assert_analysis_study_identity <- function(study_dir, review, plan, contract = N
 statistical_review_set_metadata <- function(lines, name, value) {
   closing <- which(trimws(lines[-1L]) == "---")[[1]] + 1L; range <- 2:(closing - 1L); hit <- grep(paste0("^", name, "\\s*:"), lines[range]); encoded <- if (is.character(value)) paste0("'", gsub("'", "''", value), "'") else tolower(as.character(value)); replacement <- paste0(name, ": ", encoded)
   if (length(hit)) lines[[range[hit[[1]]]]] <- replacement else lines <- c(lines[seq_len(closing - 1L)], replacement, lines[closing:length(lines)]); lines
-}
-
-reject_legacy_analysis_artifacts <- function(study_dir) {
-  forbidden <- c(file.path(study_dir, "statistician-review", "endpoint-mapping.yaml"), file.path(study_dir, "statistician-review", "analysis-specification.md"))
-  found <- forbidden[file.exists(forbidden)]; if (length(found)) stop("LEGACY-ARTIFACT-REJECTED: migrate/remove active legacy artifact(s): ", paste(basename(found), collapse = ", "))
-  invisible(TRUE)
 }

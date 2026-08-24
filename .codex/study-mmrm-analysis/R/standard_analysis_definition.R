@@ -43,11 +43,26 @@ standard_validate_predicate <- function(predicate, context) {
   invisible(TRUE)
 }
 
-standard_validate_dataset <- function(dataset, context) {
-  standard_assert_keys(dataset, c("file", "format", "relative_path", "sha256"), character(), context)
-  file <- standard_scalar_character(dataset$file, paste0(context, ".file")); format <- standard_scalar_character(dataset$format, paste0(context, ".format")); path <- standard_project_relative_path(dataset$relative_path, paste0(context, ".relative_path"))
-  if (!format %in% c("sas7bdat", "csv", "rds") || !identical(tolower(tools::file_ext(file)), format) || !identical(basename(path), file)) stop(context, " file/format/relative_path are inconsistent.")
-  if (!grepl("^[A-Fa-f0-9]{64}$", standard_scalar_character(dataset$sha256, paste0(context, ".sha256")))) stop(context, ".sha256 must be 64 hexadecimal characters.")
+standard_validate_dataset <- function(dataset, execution_context, context) {
+  standard_assert_keys(dataset, c("binding_mode", "file", "format", "relative_path", "sha256"), character(), context)
+  mode <- standard_scalar_character(dataset$binding_mode, paste0(context, ".binding_mode"))
+  file <- standard_scalar_character(dataset$file, paste0(context, ".file"))
+  format <- tolower(standard_scalar_character(dataset$format, paste0(context, ".format")))
+  if (identical(format, "rds")) stop("PLAN-SCHEMA-DATASET-FORMAT-CROSS-LANGUAGE: ", context, " does not support rds for the self-contained R/SAS profile.")
+  if (!format %in% c("sas7bdat", "csv") || !identical(tolower(tools::file_ext(file)), format) || !identical(basename(file), file)) stop("PLAN-SCHEMA-DATASET-BINDING-FILE: ", context, " file must be a basename whose extension matches format.")
+  availability <- standard_scalar_character(execution_context$data_availability, "execution_context.data_availability")
+  classification <- standard_scalar_character(execution_context$data_classification, "execution_context.data_classification")
+  intended_use <- standard_scalar_character(execution_context$intended_use, "execution_context.intended_use")
+  if (identical(mode, "linked")) {
+    if (!identical(availability, "available")) stop("PLAN-SCHEMA-DATASET-BINDING-LINKED-CONTEXT: linked datasets require data_availability=available.")
+    path <- standard_project_relative_path(dataset$relative_path, paste0(context, ".relative_path"))
+    if (!identical(basename(path), file)) stop("PLAN-SCHEMA-DATASET-BINDING-LINKED-PATH: file and relative_path basename differ.")
+    if (!grepl("^[A-Fa-f0-9]{64}$", standard_scalar_character(dataset$sha256, paste0(context, ".sha256")))) stop("PLAN-SCHEMA-DATASET-BINDING-LINKED-SHA256: sha256 must be 64 hexadecimal characters.")
+  } else if (identical(mode, "planned")) {
+    allowed_context <- (identical(availability, "none") && identical(classification, "none") && identical(intended_use, "code_generation")) || identical(availability, "available")
+    if (!allowed_context) stop("PLAN-SCHEMA-DATASET-BINDING-PLANNED-CONTEXT: planned datasets require none+none+code_generation or an available mixed-study context.")
+    if (!is.null(dataset$relative_path) || !is.null(dataset$sha256)) stop("PLAN-SCHEMA-DATASET-BINDING-PLANNED-NULL: planned relative_path and sha256 must be null.")
+  } else stop("PLAN-SCHEMA-DATASET-BINDING-MODE: binding_mode must be linked or planned.")
   invisible(TRUE)
 }
 
@@ -114,11 +129,11 @@ standard_endpoint_predicate_matches <- function(predicates, definition) {
   if (length(codes) == 1L) identical(predicate$operator, "eq") && identical(as.character(predicate$value), codes) else identical(predicate$operator, "in") && length(predicate$value) == length(codes) && setequal(as.character(predicate$value), codes)
 }
 
-validate_standard_analysis_definition <- function(analysis, context = "analysis", contract = FALSE) {
-  required <- c("analysis_id", if (contract) "tfl_id" else "source_tfl_id", "title", "dataset", "mappings", "derivations", "filters", "groups", "endpoint_definitions", "fixed_effects", "covariance", "df_method", "estimands")
+validate_standard_analysis_definition <- function(analysis, execution_context, context = "analysis", contract = FALSE) {
+  required <- c("analysis_id", if (contract) "tfl_id" else "source_tfl_id", "title", "dataset", "mappings", "derivations", "filters", "groups", "endpoint_definitions", "fixed_effects", "reml", "covariance", "df_method", "estimands")
   optional <- c(if (contract) c("adapter_file", "adapter_sha256", "output") else c("adapter", "trace"), "treatment")
   standard_assert_keys(analysis, required, optional, context)
-  standard_validate_id(analysis$analysis_id, paste0(context, ".analysis_id")); standard_validate_id(analysis[[if (contract) "tfl_id" else "source_tfl_id"]], paste0(context, if (contract) ".tfl_id" else ".source_tfl_id")); standard_scalar_character(analysis$title, paste0(context, ".title")); standard_validate_dataset(analysis$dataset, paste0(context, ".dataset"))
+  standard_validate_id(analysis$analysis_id, paste0(context, ".analysis_id")); standard_validate_id(analysis[[if (contract) "tfl_id" else "source_tfl_id"]], paste0(context, if (contract) ".tfl_id" else ".source_tfl_id")); standard_scalar_character(analysis$title, paste0(context, ".title")); standard_validate_dataset(analysis$dataset, execution_context, paste0(context, ".dataset"))
   if (!is.null(analysis$adapter)) { standard_assert_keys(analysis$adapter, c("file", "sha256"), character(), paste0(context, ".adapter")); standard_project_relative_path(analysis$adapter$file, paste0(context, ".adapter.file")); if (!grepl("^[A-Fa-f0-9]{64}$", analysis$adapter$sha256)) stop(context, ".adapter.sha256 invalid.") }
   if (contract) {
     paired <- c("adapter_file", "adapter_sha256") %in% names(analysis); if (xor(paired[[1]], paired[[2]])) stop(context, " adapter_file/adapter_sha256 must be paired.")
@@ -142,9 +157,15 @@ validate_standard_analysis_definition <- function(analysis, context = "analysis"
   standard_scalar_sequence(analysis$fixed_effects, paste0(context, ".fixed_effects"), TRUE); fixed <- unlist(analysis$fixed_effects, use.names = FALSE); allowed_fixed <- c("treatment", "visit", "treatment_by_visit", "baseline", "baseline_by_visit"); if (!is.character(fixed) || !length(fixed) || any(!fixed %in% allowed_fixed) || anyDuplicated(fixed) || !all(c("visit", "baseline", "baseline_by_visit") %in% fixed)) stop(context, ".fixed_effects invalid.")
   has_treatment <- "treatment" %in% names(analysis$mappings); has_treatment_block <- !is.null(analysis$treatment); if (!identical(has_treatment, has_treatment_block) || !identical(has_treatment, all(c("treatment", "treatment_by_visit") %in% fixed))) stop(context, " treatment mapping/block/effects inconsistent.")
   if (has_treatment) { t <- analysis$treatment; standard_assert_keys(t, c("variable", "levels", "reference", "comparator", "contrast_direction", "confidence_level", "multiplicity_adjustment"), character(), paste0(context, ".treatment")); if (!identical(t$variable, analysis$mappings$treatment)) stop(context, ".treatment.variable mismatch."); if (!is.character(t$levels) || length(t$levels) != 2L || anyDuplicated(t$levels) || !identical(t$levels, c(t$reference, t$comparator))) stop(context, ".treatment levels/reference/comparator invalid."); if (!identical(t$contrast_direction, "comparator_minus_reference") || !identical(as.numeric(t$confidence_level), 0.95) || !identical(t$multiplicity_adjustment, "none")) stop(context, ".treatment semantics unsupported.") }
+  if (!identical(standard_scalar_logical(analysis$reml, paste0(context, ".reml")), TRUE)) stop(context, ".reml must be true for the standard MMRM profile.")
   standard_assert_keys(analysis$covariance, c("primary", "fallback"), character(), paste0(context, ".covariance")); standard_scalar_sequence(analysis$covariance$fallback, paste0(context, ".covariance.fallback")); covariance <- c(analysis$covariance$primary, unlist(analysis$covariance$fallback)); if (!is.character(covariance) || any(!covariance %in% c("UN", "AR1", "CS", "TOEP")) || anyDuplicated(covariance)) stop(context, ".covariance invalid.")
   if (!analysis$df_method %in% c("Kenward-Roger", "Satterthwaite")) stop(context, ".df_method invalid.")
   standard_assert_keys(analysis$estimands, c("visit_lsmeans", "treatment_visit_lsmeans", "pairwise_differences"), character(), paste0(context, ".estimands")); invisible(lapply(names(analysis$estimands), function(name) standard_scalar_logical(analysis$estimands[[name]], paste0(context, ".estimands.", name)))); if (!isTRUE(analysis$estimands$visit_lsmeans) || (!has_treatment && any(unlist(analysis$estimands[c("treatment_visit_lsmeans", "pairwise_differences")]))) || (analysis$estimands$pairwise_differences && !analysis$estimands$treatment_visit_lsmeans)) stop(context, ".estimands inconsistent.")
-  if (contract) { standard_assert_keys(analysis$output, c("raw_file", "final_file"), character(), paste0(context, ".output")); for (name in names(analysis$output)) { file <- standard_project_relative_path(analysis$output[[name]], paste0(context, ".output.", name)); if (grepl("/", file) || !grepl("[.]csv$", file, ignore.case = TRUE)) stop(context, ".output files must be CSV basenames.") } }
+  if (contract) {
+    output_names <- c("r_raw_file", "r_final_file", "r_diagnostic_file", "r_run_record_file", "sas_raw_file", "sas_final_file", "sas_diagnostic_file", "sas_run_record_file")
+    standard_assert_keys(analysis$output, output_names, character(), paste0(context, ".output"))
+    files <- vapply(output_names, function(name) { file <- standard_project_relative_path(analysis$output[[name]], paste0(context, ".output.", name)); if (grepl("/", file) || !grepl("[.]csv$", file, ignore.case = TRUE)) stop(context, ".output files must be CSV basenames."); file }, character(1))
+    if (anyDuplicated(tolower(files))) stop("PLAN-SCHEMA-IDENTITY-OUTPUT: ", context, " output filenames must be case-insensitively unique.")
+  }
   invisible(TRUE)
 }

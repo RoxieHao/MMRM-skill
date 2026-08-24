@@ -22,7 +22,3 @@ studies/
 # Editor and stray local review artifacts
 .vscode/
 /statistical-review_filled.md
-
-# Local workflow logs
-/fcn-finalization.log
-/intake-r-*.log

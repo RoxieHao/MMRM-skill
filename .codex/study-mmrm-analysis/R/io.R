@@ -56,9 +56,9 @@ project_relative_path <- function(path, project_dir) {
 }
 
 resolve_linked_source <- function(project_dir, manifest_path, binding) {
-  if (!is.list(binding) || !all(c("file", "format", "relative_path", "sha256") %in% names(binding))) stop("runtime dataset binding must include file, format, relative_path and sha256.")
+  if (!is.list(binding) || !identical(binding$binding_mode, "linked") || !all(c("binding_mode", "file", "format", "relative_path", "sha256") %in% names(binding))) stop("runtime dataset binding must be linked and include binding_mode, file, format, relative_path and sha256.")
   file_name <- as.character(binding$file); format <- tolower(as.character(binding$format)); relative_path <- gsub("\\\\", "/", as.character(binding$relative_path)); contract_sha <- toupper(as.character(binding$sha256))
-  if (!format %in% c("sas7bdat", "csv", "rds") || !identical(tolower(tools::file_ext(file_name)), format) || !identical(basename(relative_path), file_name)) stop("runtime dataset binding file/format/relative_path mismatch.")
+  if (!format %in% c("sas7bdat", "csv") || !identical(tolower(tools::file_ext(file_name)), format) || !identical(basename(relative_path), file_name)) stop("runtime dataset binding file/format/relative_path mismatch.")
   if (!grepl("^[A-F0-9]{64}$", contract_sha)) stop("runtime dataset binding SHA-256 invalid: ", file_name)
   if (!file.exists(manifest_path)) stop("missing input manifest: ", manifest_path)
   manifest <- read_utf8_bom_csv(manifest_path)
@@ -85,7 +85,7 @@ read_linked_source_data <- function(project_dir, manifest_path, binding) {
   source_path <- resolve_linked_source(project_dir, manifest_path, binding)
   extension <- tolower(tools::file_ext(source_path))
   if (!identical(extension, tolower(as.character(binding$format)))) stop("linked source format differs from approved runtime binding: ", as.character(binding$file))
-  data <- switch(extension, sas7bdat = { if (!requireNamespace("haven", quietly = TRUE)) stop("haven package is required to read sas7bdat."); haven::read_sas(source_path) }, csv = read_utf8_bom_csv(source_path), rds = readRDS(source_path), stop("unsupported linked source format: ", extension))
+  data <- switch(extension, sas7bdat = { if (!requireNamespace("haven", quietly = TRUE)) stop("haven package is required to read sas7bdat."); haven::read_sas(source_path) }, csv = read_utf8_bom_csv(source_path), stop("unsupported linked source format: ", extension))
   if (!is.data.frame(data)) stop("linked source must read as a data.frame: ", as.character(binding$file))
   as.data.frame(data, stringsAsFactors = FALSE, check.names = FALSE)
 }

@@ -15,15 +15,27 @@ analysis_approval_realpath <- function(path, context) {
   file.path(normalizePath(parent, winslash = "/", mustWork = TRUE), base)
 }
 analysis_approval_within_study <- function(real_path, study_root) startsWith(analysis_approval_comparable(real_path), paste0(analysis_approval_comparable(study_root), "/"))
-# The only paths a recovered transaction may touch: the formal review/contract, generated
-# R/SAS/collector programs, and removed-analysis output roots inside the current study.
+# The only paths a recovered transaction may touch: the formal review/contract and the
+# generator-owned R/SAS/collector programs inside the current study. Runtime evidence
+# (raw/final/diagnostic/run-record/manifest under output/) is deliberately NOT reachable:
+# per design 15.7 只有单独、显式、具有保留策略的归档流程才能处理运行产物。
 analysis_approval_target_allowed <- function(real_target, study_root) {
   if (!analysis_approval_within_study(real_target, study_root)) return(FALSE)
   rel <- substring(real_target, nchar(study_root) + 2L)
   rel %in% c("statistician-review/statistical-review.md", "statistician-review/standard-mmrm-contract.yaml") ||
-    grepl("^analysis/r/[^/]+\\.R$", rel) ||
-    grepl("^analysis/sas/[^/]+_template\\.sas$", rel) ||
-    grepl("^output/analyses/[^/]+/.+$", rel)
+    analysis_approval_generator_owned_relative(rel)
+}
+# generator 拥有的 program 文件：analysis/r/*.R 与 analysis/sas/*.sas（含历史 *_template.sas）。
+analysis_approval_generator_owned_relative <- function(rel) grepl("^analysis/r/[^/]+\\.R$", rel) || grepl("^analysis/sas/[^/]+\\.sas$", rel)
+analysis_assert_generator_owned_programs <- function(paths, study_dir, context = "delete target") {
+  if (!length(paths)) return(invisible(TRUE))
+  study_root <- normalizePath(study_dir, winslash = "/", mustWork = TRUE)
+  for (path in unique(as.character(paths))) {
+    real <- analysis_approval_realpath(path, context)
+    rel <- if (analysis_approval_within_study(real, study_root)) substring(real, nchar(study_root) + 2L) else ""
+    if (!nzchar(rel) || !analysis_approval_generator_owned_relative(rel)) stop("PLAN-HASH-TRANSACTION: the approval publisher may only delete generator-owned programs, not runtime evidence: ", path)
+  }
+  invisible(TRUE)
 }
 analysis_approval_require_txn_file <- function(path, txn_dir_real, transaction_id, context) {
   real <- analysis_approval_realpath(path, context)
@@ -115,7 +127,6 @@ analysis_approval_recover <- function(study_dir) {
 }
 
 assert_approved_analysis <- function(study_dir, project_dir, expected_analysis_id = NULL, pinned_approval_payload_sha256 = NULL, pinned_contract_sha256 = NULL) {
-  reject_legacy_analysis_artifacts(study_dir)
   review <- read_statistical_review(file.path(study_dir, "statistician-review", "statistical-review.md")); metadata <- review$metadata
   required <- c("review_schema_version", "study_id", "review_status", "reviewed_by", "reviewed_at_utc", "finalization_status", "analysis_plan_file", "analysis_plan_sha256", "source_evidence_sha256", "review_execution_content_sha256", "approval_payload_sha256")
   if (any(!required %in% names(metadata)) || !identical(as.character(metadata$review_schema_version), "2.0") || !identical(as.character(metadata$review_status), "approved") || !identical(as.character(metadata$finalization_status), "ready_for_final_signature") || !nzchar(as.character(metadata$reviewed_by)) || !statistical_review_iso_utc(metadata$reviewed_at_utc)) stop("PLAN-HASH-APPROVAL: review is not validly approved.")
@@ -136,9 +147,22 @@ assert_approved_analysis <- function(study_dir, project_dir, expected_analysis_i
   if (!is.null(expected_analysis_id)) standard_contract_get_analysis(contract, expected_analysis_id)
   list(review = review, plan = plan, payload = payload, approval_payload_sha256 = payload_sha, contract = contract, contract_sha256 = contract_sha)
 }
-assert_analysis_execution_allowed <- function(chain) {
+assert_analysis_execution_allowed <- function(chain, analysis = NULL, analysis_id = NULL) {
   context <- chain$plan$execution_context
-  if (context$data_availability == "none" || context$data_classification %in% c("none", "unknown")) stop("Approved context permits code generation only; model execution is blocked.")
+  if (is.character(analysis) && length(analysis) == 1L && is.null(analysis_id)) { analysis_id <- analysis; analysis <- NULL }
+  if (is.null(analysis)) {
+    if (!is.null(analysis_id)) analysis <- standard_contract_get_analysis(chain$contract, analysis_id)
+    else if (length(chain$contract$analyses) == 1L) analysis <- chain$contract$analyses[[1L]]
+    else stop("PLAN-SCHEMA-DATASET-BINDING-EXECUTION: analysis or analysis_id is required for a multi-analysis contract.")
+  } else {
+    if (!is.list(analysis) || is.null(analysis$analysis_id)) stop("PLAN-SCHEMA-DATASET-BINDING-EXECUTION: analysis must identify an approved contract analysis.")
+    approved <- standard_contract_get_analysis(chain$contract, as.character(analysis$analysis_id))
+    if (!identical(canonical_bytes(analysis), canonical_bytes(approved))) stop("PLAN-SCHEMA-DATASET-BINDING-EXECUTION: supplied analysis differs from the approved contract analysis.")
+    analysis <- approved
+  }
+  if (is.null(analysis$dataset$binding_mode)) stop("PLAN-SCHEMA-DATASET-BINDING-EXECUTION: validated analysis binding is required.")
+  if (identical(analysis$dataset$binding_mode, "planned")) stop("PLAN-SCHEMA-DATASET-BINDING-EXECUTION: planned analysis is code-generation-only and cannot execute.")
+  if (context$data_availability == "none" || context$data_classification %in% c("none", "unknown")) stop("PLAN-SCHEMA-CONTEXT-EXECUTION: approved study classification permits code generation only; model execution is blocked.")
   invisible(TRUE)
 }
 analysis_render_template <- function(template, replacements) { result <- template; for (name in names(replacements)) result <- gsub(paste0("<", name, ">"), replacements[[name]], result, fixed = TRUE); if (grepl("<[A-Z0-9_]+>", result)) stop("Generated program retains an unresolved placeholder."); result }
@@ -146,11 +170,32 @@ analysis_validate_adapter_pins <- function(contract, project_dir) {
   for (analysis in contract$analyses) if (!is.null(analysis$adapter_file)) { path <- normalize_project_relative_path(analysis$adapter_file, project_dir, "adapter_file"); if (!file.exists(path)) stop("Approved adapter does not exist: ", analysis$adapter_file); actual <- toupper(digest::digest(file = path, algo = "sha256")); if (!identical(actual, toupper(analysis$adapter_sha256))) stop("Approved adapter SHA-256 mismatch: ", analysis$adapter_file) }
   invisible(TRUE)
 }
+analysis_generated_collector_target <- function(study_dir) file.path(study_dir, "analysis", "r", "run_all_mmrm.R")
+# 8.2 current target 集合：每个 analysis 一个自包含 R 程序和一个自包含 SAS 程序，
+# 外加每次 generation 都必须产出的正式便利 collector。<analysis_id>_template.sas 不再是 target。
 analysis_generated_targets <- function(study_dir, contract) {
   analysis_ids <- vapply(contract$analyses, function(x) as.character(x$analysis_id), character(1))
-  c(file.path(study_dir, "analysis", "r", paste0(analysis_ids, ".R")), file.path(study_dir, "analysis", "sas", paste0(analysis_ids, "_template.sas")), file.path(study_dir, "analysis", "r", "run_all_mmrm.R"))
+  c(vapply(analysis_ids, function(id) analysis_generation_program_path(study_dir, id, "r"), character(1), USE.NAMES = FALSE),
+    vapply(analysis_ids, function(id) analysis_generation_program_path(study_dir, id, "sas"), character(1), USE.NAMES = FALSE),
+    analysis_generated_collector_target(study_dir))
 }
-analysis_obsolete_generated_targets <- function(study_dir, previous_contract, current_files) setdiff(analysis_generated_targets(study_dir, previous_contract), names(current_files))
+# 停用的旧正式 renderer 产物：任何 <analysis_id>_template.sas。
+analysis_legacy_template_targets <- function(study_dir, contract = NULL) {
+  directory <- file.path(study_dir, "analysis", "sas")
+  on_disk <- if (dir.exists(directory)) list.files(directory, pattern = "_template[.]sas$", full.names = TRUE) else character()
+  declared <- if (is.null(contract)) character() else vapply(contract$analyses, function(x) file.path(directory, paste0(standard_contract_safe_identity(x$analysis_id), "_template.sas")), character(1), USE.NAMES = FALSE)
+  unique(gsub("\\\\", "/", c(on_disk, declared)))
+}
+# obsolete delete-set 只含 generator 拥有的 program：已移除 analysis 的 .R/.sas/_template.sas，
+# 以及全部历史 _template.sas。当前 analysis 的同名旧 wrapper 由 write-set 原子替换，不进 delete-set。
+# 运行证据（raw/final/diagnostic/run-record/manifest）永不进入该集合。
+analysis_obsolete_generated_targets <- function(study_dir, previous_contract, current_files) {
+  previous <- c(analysis_generated_targets(study_dir, previous_contract), analysis_legacy_template_targets(study_dir, previous_contract))
+  obsolete <- setdiff(unique(gsub("\\\\", "/", previous)), gsub("\\\\", "/", names(current_files)))
+  obsolete <- obsolete[file.exists(obsolete)]
+  analysis_assert_generator_owned_programs(obsolete, study_dir, "obsolete program")
+  obsolete
+}
 analysis_removed_analysis_ids <- function(previous_contract, current_contract) {
   previous_ids <- vapply(previous_contract$analyses, function(x) as.character(x$analysis_id), character(1))
   current_ids <- vapply(current_contract$analyses, function(x) as.character(x$analysis_id), character(1))
@@ -163,15 +208,25 @@ analysis_removed_output_files <- function(study_dir, removed_ids) {
   for (root in roots) if (dir.exists(root)) files <- c(files, list.files(root, recursive = TRUE, all.files = TRUE, full.names = TRUE, no.. = TRUE, include.dirs = FALSE))
   unique(files)
 }
-analysis_render_generated <- function(study_dir, project_dir, contract, payload_sha, contract_sha) {
-  skill <- file.path(project_dir, ".codex", "study-mmrm-analysis"); wrapper <- paste(readLines(file.path(skill, "R", "templates", "study_mmrm_template.R"), warn = FALSE), collapse = "\n"); collector <- paste(readLines(file.path(skill, "R", "templates", "run_all_mmrm_template.R"), warn = FALSE), collapse = "\n"); files <- list()
-  for (analysis in contract$analyses) { replacements <- c(ANALYSIS_ID = analysis$analysis_id, APPROVAL_PAYLOAD_SHA256 = payload_sha, CONTRACT_SHA256 = contract_sha); files[[file.path(study_dir, "analysis", "r", paste0(analysis$analysis_id, ".R"))]] <- analysis_render_template(wrapper, replacements); files[[file.path(study_dir, "analysis", "sas", paste0(analysis$analysis_id, "_template.sas"))]] <- render_standard_sas_template(contract, analysis, payload_sha, contract_sha) }
-  files[[file.path(study_dir, "analysis", "r", "run_all_mmrm.R")]] <- analysis_render_template(collector, c(APPROVAL_PAYLOAD_SHA256 = payload_sha, CONTRACT_SHA256 = contract_sha)); files
+analysis_program_lines <- function(text) strsplit(as.character(text), "\n", fixed = TRUE)[[1L]]
+# 8.3 完整 write-set：先在内存里把所有 analysis 的 R/SAS 程序渲染并校验通过、再做 coverage，
+# 才把文本交给既有 transaction publisher。旧正式 renderer（render_standard_sas_template）
+# 在审批链中已停用，审批链不再发布任何 template。
+analysis_render_generated <- function(study_dir, project_dir, contract, payload_sha, contract_sha, test_only_drop_targets = character()) {
+  texts <- analysis_generate_program_texts(study_dir, project_dir, contract, payload_sha, contract_sha, test_only_drop_targets = test_only_drop_targets)
+  files <- lapply(texts, analysis_program_lines)
+  collector_template <- paste(readLines(file.path(project_dir, ".codex", "study-mmrm-analysis", "R", "templates", "run_all_mmrm_template.R"), warn = FALSE), collapse = "\n")
+  files[[analysis_generated_collector_target(study_dir)]] <- analysis_program_lines(analysis_render_template(collector_template, c(APPROVAL_PAYLOAD_SHA256 = payload_sha, CONTRACT_SHA256 = contract_sha)))
+  files
 }
 analysis_transaction_publish <- function(files, journal, fail_after = Inf, delete_targets = character()) {
   if (file.exists(journal)) stop("PLAN-HASH-TRANSACTION: unresolved transaction journal must be recovered before publication: ", journal)
   targets <- names(files); delete_targets <- unique(as.character(delete_targets)); if (length(intersect(targets, delete_targets))) stop("PLAN-HASH-TRANSACTION: a target cannot be both published and deleted.")
   study_dir <- dirname(dirname(journal)); transaction_id <- analysis_approval_new_transaction_id()
+  # 停用旧正式 renderer 的最后一道闸门：审批链不得再发布 SAS template。
+  if (any(grepl("_template[.]sas$", basename(targets)))) stop("PLAN-HASH-TRANSACTION: publishing <analysis_id>_template.sas is disabled; the approval chain publishes self-contained .sas programs only.")
+  # delete-set 只能是 generator 拥有的 program；运行证据（raw/final/diagnostic/run-record/manifest）永不删除。
+  analysis_assert_generator_owned_programs(delete_targets, study_dir, "delete target")
   txn_dir <- analysis_approval_transaction_dir(study_dir); dir.create(txn_dir, recursive = TRUE, showWarnings = FALSE)
   operations <- c(lapply(targets, function(target) list(target = target, delete = FALSE)), lapply(delete_targets, function(target) list(target = target, delete = TRUE)))
   invisible(lapply(unique(dirname(c(targets, delete_targets))), dir.create, recursive = TRUE, showWarnings = FALSE)); entries <- list()
@@ -203,7 +258,7 @@ analysis_transaction_publish <- function(files, journal, fail_after = Inf, delet
   invisible(targets)
 }
 approve_and_generate_analysis <- function(study_dir, project_dir, reviewer, fail_after = Inf) {
-  if (!nzchar(trimws(reviewer))) stop("reviewer must be nonempty."); analysis_approval_recover(study_dir); reject_legacy_analysis_artifacts(study_dir)
+  if (!nzchar(trimws(reviewer))) stop("reviewer must be nonempty."); analysis_approval_recover(study_dir)
   review_path <- file.path(study_dir, "statistician-review", "statistical-review.md"); review <- read_statistical_review(review_path)
   if (!identical(as.character(review$metadata$finalization_status), "ready_for_final_signature")) stop("Review is not ready for final signature.")
   issues <- statistical_review_issues(review); if (nrow(issues) && any(trimws(as.character(issues$status)) != "resolved")) stop("Review has unresolved issues.")
@@ -215,11 +270,10 @@ approve_and_generate_analysis <- function(study_dir, project_dir, reviewer, fail
   approval <- list(review_file = project_relative_path(review_path, project_dir), review_sha256 = review_sha, analysis_plan_file = project_relative_path(analysis_plan_path(study_dir), project_dir), analysis_plan_sha256 = plan_sha, approval_payload_sha256 = payload_sha, source_evidence_sha256 = source_sha, reviewed_by = trimws(reviewer), approved_at_utc = approved_at)
   contract <- compile_analysis_plan_contract(plan, approval); analysis_validate_adapter_pins(contract, project_dir); write_standard_mmrm_contract(contract, contract_temp); staged_contract <- read_standard_mmrm_contract(contract_temp); assert_analysis_study_identity(study_dir, review, plan, staged_contract); assert_plan_contract_parity(plan, staged_contract); contract_sha <- attr(staged_contract, "sha256")
   rendered <- analysis_render_generated(study_dir, project_dir, staged_contract, payload_sha, contract_sha); files <- c(setNames(list(approved_lines), review_path), setNames(list(readLines(contract_temp, warn = FALSE)), analysis_contract_path(study_dir)), rendered)
-  obsolete <- character(); removed_ids <- character(); if (file.exists(analysis_contract_path(study_dir))) { previous_contract <- read_standard_mmrm_contract(analysis_contract_path(study_dir)); obsolete <- analysis_obsolete_generated_targets(study_dir, previous_contract, rendered); removed_ids <- analysis_removed_analysis_ids(previous_contract, staged_contract) }
-  removed_outputs <- analysis_removed_output_files(study_dir, removed_ids)
-  analysis_transaction_publish(files, analysis_approval_journal_path(study_dir), fail_after = fail_after, delete_targets = c(obsolete, removed_outputs))
-  # After a successful commit the removed-analysis output files are gone; drop the now-empty
-  # output roots so they cannot be mistaken for current evidence by humans or glob consumers.
-  for (root in analysis_removed_output_roots(study_dir, removed_ids)) if (dir.exists(root)) unlink(root, recursive = TRUE, force = TRUE)
+  obsolete <- c(if (file.exists(analysis_contract_path(study_dir))) analysis_obsolete_generated_targets(study_dir, read_standard_mmrm_contract(analysis_contract_path(study_dir)), rendered) else character(), setdiff(analysis_legacy_template_targets(study_dir, staged_contract), names(rendered)))
+  obsolete <- unique(obsolete[file.exists(obsolete)])
+  # 运行证据不参与本 transaction：removed analysis 的 raw/final/diagnostic/run-record/manifest
+  # 只能由单独、显式且具有保留策略的归档流程处理（design 15.7）。
+  analysis_transaction_publish(files, analysis_approval_journal_path(study_dir), fail_after = fail_after, delete_targets = obsolete)
   invisible(assert_approved_analysis(study_dir, project_dir, pinned_approval_payload_sha256 = payload_sha, pinned_contract_sha256 = contract_sha))
 }

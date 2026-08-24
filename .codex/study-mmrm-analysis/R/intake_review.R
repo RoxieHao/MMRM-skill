@@ -113,10 +113,7 @@ intake_source_reference <- function(relative_path, start_line, end_line = start_
   paste0(relative_path, ":L", start_line, "-L", end_line)
 }
 
-intake_escape_markdown <- function(value) {
-  value <- gsub("\\|", "\\\\|", as.character(value))
-  gsub("[\r\n]+", " ", value)
-}
+intake_escape_markdown <- function(value) markdown_table_escape(value)
 
 intake_markdown_table_blocks <- function(lines) {
   table_lines <- which(grepl("^\\s*\\|", lines))
@@ -391,37 +388,6 @@ intake_render_review <- function(study_dir, project_dir, route, discovery) {
   c(metadata, body)
 }
 
-write_intake_statistical_review <- function(study_dir, project_dir, route, replace_pending = FALSE) {
-  review_path <- file.path(study_dir, "statistician-review", "statistical-review.md")
-  if (file.exists(review_path)) {
-    current <- read_statistical_review(review_path)
-    finalized <- !is.null(current$metadata$finalization_status) && nzchar(trimws(as.character(current$metadata$finalization_status)))
-    if (finalized) {
-      stop("statistical-review.md 已经进入 finalization 阶段；不要用 intake generator 覆盖。若要重新开始，请先人工归档或删除该 review。")
-    }
-    if (!isTRUE(replace_pending) || !identical(as.character(current$metadata$review_status), "pending")) {
-      stop("仅允许使用 replace_pending=true 覆盖现有 pending statistical-review.md；approved review 不可覆盖。")
-    }
-  }
-  discovery <- intake_discover_mmrm_tfls(study_dir, project_dir)
-  mapping_path <- file.path(study_dir, "statistician-review", "retired-artifact.invalid")
-  retired_mapping_write_template(mapping_path, discovery$tfls)
-  dir.create(dirname(review_path), recursive = TRUE, showWarnings = FALSE)
-  writeLines(intake_render_review(study_dir, project_dir, route, discovery), review_path, useBytes = TRUE)
-  trace_path <- file.path(study_dir, "backup-trace", "intake-mmrm-tfl-scan.md")
-  extraction_lines <- intake_extraction_trace_lines(discovery$manifest$rows)
-  trace_lines <- c(
-    "# Intake MMRM TFL 扫描记录", "",
-    paste0("已扫描文本材料数：", nrow(discovery$sources)),
-    paste0("明确 MMRM TFL 数：", length(discovery$tfls)), "",
-    "## 输入抽取审计", extraction_lines, "",
-    "## 发现的 TFL",
-    if (length(discovery$tfls)) vapply(discovery$tfls, function(x) paste0("- ", x$tfl_id, "：", x$title, "（", x$source_ref, "）"), character(1)) else "- 未发现明确 MMRM TFL。"
-  )
-  writeLines(trace_lines, trace_path, useBytes = TRUE)
-  list(review_path = review_path, trace_path = trace_path, tfl_count = length(discovery$tfls))
-}
-
 # Analysis-plan workflow overrides. Markdown is evidence/reviewer interface only.
 intake_render_review <- function(study_dir, project_dir, route, discovery) {
   study_id <- basename(normalizePath(study_dir, winslash = "/", mustWork = TRUE)); manifest_relative <- project_relative_path(discovery$manifest$path, project_dir)
@@ -431,7 +397,7 @@ intake_render_review <- function(study_dir, project_dir, route, discovery) {
     "# 统计师 MMRM 审阅", "", "> 统计师只编辑本 Markdown 的审阅意见和 issue resolution。analysis-plan.yaml 由显式 Compile Analysis Plan agent step 生成；R 不从自由文本推断执行参数。", "",
     "## 1. 审阅结论与签核", "当前为 pending；签核字段由 approve_and_generate_analysis.R 在通过全部 gate 后写入。", "",
     "## 2. Study 与数据范围", paste0("Study：", study_id, "。Registered evidence manifest：", manifest_relative, "。"), "",
-    "## 3. Analysis 与 TFL 清单", "每一行的 decision_id 是稳定 trace ID。统计师在“统计师审阅意见”中明确决定；歧义必须保留并形成 issue。", "", candidate_blocks,
+    "## 3. Analysis 与 TFL 清单", "每一行的 decision_id 是稳定 trace ID。统计师只编辑“统计师审阅意见”单元格，并须保持在同一 Markdown 物理行；需要换行时使用 <br>。不得在候选 TFL 标题下新增或粘贴其他 Markdown 表格；歧义必须保留并形成 issue。", "", candidate_blocks,
     "## 4. Analysis Plan（只读）", "<!-- ANALYSIS_PLAN_BEGIN -->", "Pending: compile and validate analysis-plan.yaml.", "<!-- ANALYSIS_PLAN_END -->", "",
     "## 5. 模型、协方差与估计量确认", "完整 typed values 仅见第 4 节只读渲染；本节是人类审阅记录，不是执行输入。", "",
     "## 6. Adapter / 派生 / 行分配确认", "Adapter 必须 SHA-pinned；built-in derivation 仅支持 typed recode；复杂转换必须使用批准 adapter。", "",
@@ -441,8 +407,15 @@ intake_render_review <- function(study_dir, project_dir, route, discovery) {
 
 write_intake_statistical_review <- function(study_dir, project_dir, route, replace_pending = FALSE) {
   review_path <- file.path(study_dir, "statistician-review", "statistical-review.md"); plan_path <- analysis_plan_path(study_dir)
-  reject_legacy_analysis_artifacts(study_dir)
-  if (file.exists(review_path)) { current <- read_statistical_review(review_path); if (!isTRUE(replace_pending) || !identical(as.character(current$metadata$review_status), "pending")) stop("Only replace_pending=true may replace a pending review.") }
+  if (file.exists(review_path)) {
+    current <- read_statistical_review(review_path)
+    review_status <- trimws(as.character(current$metadata$review_status))
+    finalization_status <- trimws(as.character(current$metadata$finalization_status))
+    replaceable <- identical(review_status, "pending") && finalization_status %in% c("", "pending")
+    if (!isTRUE(replace_pending) || !replaceable) {
+      stop("Intake may replace only an unfinalized pending review. Archive or explicitly remove a finalized, blocked, or approved review before restarting intake.")
+    }
+  }
   discovery <- intake_discover_mmrm_tfls(study_dir, project_dir); dir.create(dirname(review_path), recursive = TRUE, showWarnings = FALSE)
   analysis_plan_write(analysis_plan_template(basename(normalizePath(study_dir, winslash = "/", mustWork = TRUE)), discovery$tfls), plan_path)
   writeLines(intake_render_review(study_dir, project_dir, route, discovery), review_path, useBytes = TRUE)

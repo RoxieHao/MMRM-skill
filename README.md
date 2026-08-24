@@ -32,18 +32,18 @@
 - `.codex/study-mmrm-analysis/R/tests/`：通用 skill 的集成测试。
 - `studies/<study_id>/input/`：SAP、shell、ADaM、ADaM spec、TFL spec 或统计师自写输入。
 - `studies/<study_id>/backup-trace/`：输入 manifest、hash、AI 提取记录和历史版本。
-- `studies/<study_id>/statistician-review/`：`statistical-review.md` 和批准后的 `analysis-specification.md`。
-- `studies/<study_id>/analysis/r/`：独立 R analysis 程序和 collector runner。
-- `studies/<study_id>/analysis/sas/`：只读 SAS template。
+- `studies/<study_id>/statistician-review/`：`statistical-review.md`、`analysis-plan.yaml` 和批准后机械编译的 `standard-mmrm-contract.yaml`。
+- `studies/<study_id>/analysis/r/`：每个已批准 TFL 一个自包含 `<safe_analysis_id>.R`，外加 collector `run_all_mmrm.R`。
+- `studies/<study_id>/analysis/sas/`：每个已批准 TFL 一个自包含 `<safe_analysis_id>.sas`。SAS 只作为代码交付物，本流水线从不执行它，由统计师在批准的目标环境自行运行。
 - `studies/<study_id>/output/`：由 validated execution/collector 生成的正式输出、中文 diagnostics、logs、RDS 和唯一 `tfl-output-manifest.csv`。
 
 ## 主工作流
 
 当前推荐流程是：
 
-`input registration -> statistical-review.md -> analysis-specification.md gate -> independent R/SAS programs -> mmrm run -> analysis-scoped diagnostics -> single formal manifest`
+`input registration -> statistical-review.md + analysis-plan.yaml -> finalize -> approve-and-generate -> 逐 TFL 自包含 R/SAS 程序 -> R 独立运行或 collector 汇总 -> analysis-scoped diagnostics -> single formal manifest`
 
-也就是：不再用 workbook gate。人工签核落在 Markdown review/specification gate；QC 人读解释落在中文 diagnostics；正式交付清单只有一个 manifest；每个 analysis 的证据链都在自己的 output 子目录中。
+也就是：不再用 workbook gate。人工签核落在 Markdown review 与类型化 `analysis-plan.yaml`；批准后一次事务发布 N 个自包含 `.R` + N 个自包含 `.sas` + collector；QC 人读解释落在中文 diagnostics；正式交付清单只有一个 manifest；每个 analysis 的证据链都在自己的 output 子目录中。SAS 结果只能通过 collector 的 `--mode=collect-only` 导入统计师提供并通过身份校验的 run record。
 
 详细步骤见：
 
@@ -64,7 +64,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate_project.p
 ## 当前建设优先级
 
 1. 使用通用 skill 初始化正式 study 的受控目录和审阅模板。
-2. 先完成 `statistical-review.md` 和 `analysis-specification.md` gate，再生成正式 R/SAS 程序。
+2. 先完成 `statistical-review.md` 与 `analysis-plan.yaml` 的 finalize 与批准，再由 approve-and-generate 一次事务发布正式的逐 TFL 自包含 R/SAS 程序。
 3. `tests/` 只作为 skill 开发期 fixture，不参与正式 study 执行。
 
 ## Population Flag 总原则

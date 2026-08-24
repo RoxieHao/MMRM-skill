@@ -29,7 +29,7 @@ self_check <- parse_logical_arg(get_arg("self-check", required = FALSE, default 
 if (self_check) {
   project_dir <- find_project_root(getwd())
   skill_dir <- file.path(project_dir, ".codex", "study-mmrm-analysis")
-  for (helper in c("canonical_hash.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R", "review_finalization.R")) {
+  for (helper in c("canonical_hash.R", "standard_contract.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R", "review_finalization.R")) {
     source(file.path(skill_dir, "R", helper), encoding = "UTF-8")
   }
   review_finalization_self_check()
@@ -40,7 +40,7 @@ if (self_check) {
 study_dir <- normalizePath(get_arg("study-dir"), winslash = "/", mustWork = TRUE)
 project_dir <- find_project_root(study_dir)
 skill_dir <- file.path(project_dir, ".codex", "study-mmrm-analysis")
-for (helper in c("canonical_hash.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R", "review_finalization.R")) {
+for (helper in c("canonical_hash.R", "standard_contract.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R", "review_finalization.R")) {
   source(file.path(skill_dir, "R", helper), encoding = "UTF-8")
 }
 

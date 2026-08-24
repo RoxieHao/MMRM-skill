@@ -46,8 +46,6 @@ review_finalize_atomic_write <- function(lines, target) {
 
 finalize_statistical_review <- function(study_dir, source_review, target_review, allow_unresolved = TRUE) {
   project_dir <- review_finalize_project_dir(study_dir); issues <- list()
-  legacy_error <- tryCatch({ reject_legacy_analysis_artifacts(study_dir); NULL }, error = function(e) e)
-  if (inherits(legacy_error, "error")) issues[[length(issues) + 1L]] <- review_finalize_issue_frame("PLAN-SCHEMA-LEGACY", "ALL", "legacy_artifacts", conditionMessage(legacy_error), "no active legacy endpoint/specification artifacts", "Migrate the study to analysis-plan.yaml and archive/remove active legacy files.")
   review <- tryCatch(read_statistical_review(source_review), error = function(e) e)
   if (inherits(review, "error")) issues[[length(issues) + 1L]] <- review_finalize_issue_frame("PLAN-SCHEMA-REVIEW", "ALL", "statistical-review.md", conditionMessage(review), "valid review schema", "Correct the review.")
   registry <- tryCatch(source_evidence_registry(project_dir, study_dir), error = function(e) e)
@@ -63,6 +61,16 @@ finalize_statistical_review <- function(study_dir, source_review, target_review,
   if (!inherits(review, "error") && !is.null(plan)) {
     identity_error <- tryCatch({ assert_analysis_study_identity(study_dir, review, plan); NULL }, error = function(e) e)
     if (inherits(identity_error, "error")) issues[[length(issues) + 1L]] <- review_finalize_issue_frame("PLAN-SCHEMA-STUDY-ID", "ALL", "study_id", conditionMessage(identity_error), "directory, review, and analysis plan study IDs match", "Correct the mismatched study_id before finalization.")
+    linked_error <- tryCatch({
+      registered_paths <- vapply(registry$entries, `[[`, character(1), "relative_path")
+      registered_sha <- vapply(registry$entries, `[[`, character(1), "sha256")
+      for (analysis in plan$analyses) if (identical(analysis$dataset$binding_mode, "linked")) {
+        index <- which(tolower(registered_paths) == tolower(analysis$dataset$relative_path))
+        if (length(index) != 1L || !identical(toupper(registered_sha[[index]]), toupper(analysis$dataset$sha256))) stop("PLAN-SCHEMA-DATASET-BINDING-LINKED-EVIDENCE: ", analysis$analysis_id, " does not match one registered entity path and SHA-256.")
+      }
+      NULL
+    }, error = function(e) e)
+    if (inherits(linked_error, "error")) issues[[length(issues) + 1L]] <- review_finalize_issue_frame("PLAN-SCHEMA-DATASET-BINDING-LINKED-EVIDENCE", "ALL", "dataset", conditionMessage(linked_error), "linked path/SHA matches registered entity evidence", "Correct the linked dataset binding or manifest evidence.")
   }
   if (!inherits(review, "error")) { unresolved <- tryCatch(review_finalize_existing_issues(review), error = function(e) e); if (inherits(unresolved, "error")) issues[[length(issues) + 1L]] <- review_finalize_issue_frame("PLAN-SCHEMA-ISSUES", "ALL", "Section 7", conditionMessage(unresolved), "valid issues table", "Correct Section 7.") else if (nrow(unresolved)) for (i in seq_len(nrow(unresolved))) issues[[length(issues) + 1L]] <- review_finalize_issue_frame(paste0("PLAN-SCHEMA-REVIEW-", sprintf("%03d", i)), as.character(unresolved$scope[[i]]), "review_issue", as.character(unresolved$question_or_risk[[i]]), "status=resolved", as.character(unresolved$resolution[[i]])) }
   issue_frame <- if (length(issues)) do.call(rbind, issues) else review_finalize_empty_issues()
@@ -97,4 +105,13 @@ finalize_statistical_review <- function(study_dir, source_review, target_review,
 review_finalization_result_path <- function(study_dir) file.path(study_dir, "backup-trace", "statistical-review-finalization-result.yaml")
 review_finalization_result_document <- function(result, source_review, target_review) list(result_schema_version = "2.0", generated_at_utc = format(Sys.time(), tz = "UTC", format = "%Y-%m-%dT%H:%M:%SZ"), source_review = normalizePath(source_review, winslash = "/", mustWork = FALSE), target_review = normalizePath(target_review, winslash = "/", mustWork = FALSE), published = isTRUE(result$published), ready_for_final_signature = isTRUE(result$ready_for_final_signature), analysis_count = as.integer(if (is.null(result$analysis_count)) 0L else result$analysis_count), issue_count = as.integer(result$issue_count), report = as.character(result$report), issues = if (nrow(result$issues)) lapply(seq_len(nrow(result$issues)), function(i) as.list(result$issues[i, , drop = FALSE])) else list())
 review_finalization_write_result <- function(path, result, source_review, target_review) { dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE); yaml::write_yaml(review_finalization_result_document(result, source_review, target_review), path); invisible(path) }
-review_finalization_self_check <- function() invisible(TRUE)
+review_finalization_self_check <- function() {
+  standard_validate_execution_context(list(
+    profile_version = standard_mmrm_profile_version(),
+    data_availability = "none",
+    data_classification = "none",
+    intended_use = "code_generation",
+    sas_execution_profile = "sas-9.4m5-self-contained/v1"
+  ), "review_finalization.self_check.execution_context")
+  invisible(TRUE)
+}

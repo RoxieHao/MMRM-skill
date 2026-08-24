@@ -12,7 +12,7 @@ find_project_root <- function(path) {
 
 project_dir <- find_project_root(getwd())
 helper_dir <- file.path(project_dir, ".codex", "study-mmrm-analysis", "R")
-for (helper in c("io.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "canonical_hash.R", "standard_contract.R", "standard_analysis_definition.R")) source(file.path(helper_dir, helper), encoding = "UTF-8")
+for (helper in c("io.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "canonical_hash.R", "standard_contract.R", "standard_analysis_definition.R", "analysis_approval.R")) source(file.path(helper_dir, helper), encoding = "UTF-8")
 if (!requireNamespace("digest", quietly = TRUE)) stop("digest package is required.")
 
 tmp <- tempfile("runtime-binding-check-", tmpdir = project_dir)
@@ -35,7 +35,9 @@ stopifnot(identical(binding$file_name, "adqssum.csv"))
 stopifnot(identical(runtime_dataset_resolve_typed_selector("adqssum.csv", catalog)$file_name, "adqssum.csv"))
 stopifnot(inherits(try(runtime_dataset_resolve_typed_selector("\u786e\u8ba4", catalog), silent = TRUE), "try-error"))
 stopifnot(inherits(try(runtime_dataset_resolve_typed_selector("nonexistent.csv", catalog), silent = TRUE), "try-error"))
-contract_binding <- list(file = binding$file_name, format = binding$format, relative_path = binding$relative_path, sha256 = binding$sha256)
+contract_binding <- list(binding_mode = "linked", file = binding$file_name, format = binding$format, relative_path = binding$relative_path, sha256 = binding$sha256)
+planned_binding <- list(binding_mode = "planned", file = binding$file_name, format = binding$format, relative_path = NULL, sha256 = NULL)
+stopifnot(inherits(try(runtime_dataset_promote_binding(tmp, project_dir, list(planned_binding)), silent = TRUE), "try-error"))
 runtime_dataset_promote_binding(tmp, project_dir, list(contract_binding))
 promoted <- read_utf8_bom_csv(manifest_path)
 stopifnot(promoted$status[[1]] == "linked_source", nrow(promoted) == 1L)
@@ -47,11 +49,15 @@ analysis <- list(
   mappings = list(subject = "USUBJID", response = "CHG", baseline = "BASE", visit = "AVISITN"), derivations = list(), filters = list(),
   groups = list(list(id = "G", label = "Synthetic", predicates = list(list(variable = "PARAMCD", operator = "eq", value = "OVERPW")))),
   endpoint_definitions = list(list(group_id = "G", endpoint_variable = "PARAMCD", selected_codes = "OVERPW", selection_mode = "single_code", dimensions = list(instrument = list(variable = "not_applicable", values = character()), version = list(variable = "not_applicable", values = character()), reporter = list(variable = "not_applicable", values = character()), subscale = list(variable = "not_applicable", values = character())), row_allocation_rule = "one_row_per_subject_endpoint_visit")),
-  fixed_effects = c("visit", "baseline", "baseline_by_visit"), covariance = list(primary = "UN", fallback = c("AR1")), df_method = "Kenward-Roger", estimands = list(visit_lsmeans = TRUE, treatment_visit_lsmeans = FALSE, pairwise_differences = FALSE), output = list(raw_file = "raw.csv", final_file = "final.csv")
+  fixed_effects = c("visit", "baseline", "baseline_by_visit"), reml = TRUE, covariance = list(primary = "UN", fallback = c("AR1")), df_method = "Kenward-Roger", estimands = list(visit_lsmeans = TRUE, treatment_visit_lsmeans = FALSE, pairwise_differences = FALSE), output = standard_contract_expected_output("TABLE-BINDING")
 )
 approval <- list(review_file = "synthetic/review.md", review_sha256 = paste(rep("A", 64L), collapse = ""), analysis_plan_file = "synthetic/analysis-plan.yaml", analysis_plan_sha256 = paste(rep("B", 64L), collapse = ""), approval_payload_sha256 = paste(rep("C", 64L), collapse = ""), source_evidence_sha256 = paste(rep("D", 64L), collapse = ""), reviewed_by = "Synthetic", approved_at_utc = "2026-08-19T00:00:00Z")
-make_contract <- function(value) list(profile_version = standard_mmrm_profile_version(), study = list(study_id = "synthetic"), execution = list(fail_fast = FALSE), approval = approval, analyses = list(value))
+make_contract <- function(value) list(contract_schema_version = "2.1", profile_version = standard_mmrm_profile_version(), study = list(study_id = "synthetic"), execution = list(data_availability = "available", data_classification = "dummy", intended_use = "technical_validation", sas_execution_profile = "sas-9.4m5-self-contained/v1", fail_fast = FALSE), approval = approval, analyses = list(value))
 validate_standard_mmrm_contract(make_contract(analysis))
+planned_analysis <- analysis; planned_analysis$dataset <- planned_binding; planned_contract <- make_contract(planned_analysis); validate_standard_mmrm_contract(planned_contract)
+planned_chain <- list(plan = list(execution_context = list(data_availability = "available", data_classification = "dummy", intended_use = "technical_validation")), contract = planned_contract)
+stopifnot(inherits(try(assert_analysis_execution_allowed(planned_chain, analysis = planned_analysis), silent = TRUE), "try-error"))
+spoofed_analysis <- planned_analysis; spoofed_analysis$dataset$binding_mode <- "linked"; stopifnot(inherits(try(assert_analysis_execution_allowed(planned_chain, analysis = spoofed_analysis), silent = TRUE), "try-error"))
 invalid_binding <- contract_binding; invalid_binding$format <- "rds"
 invalid_analysis <- analysis
 invalid_analysis$dataset <- invalid_binding

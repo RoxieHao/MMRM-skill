@@ -12,6 +12,32 @@ MMRM 数据准备的核心任务可以概括为一句话：
 
 MMRM 数据准备里很多判断会影响最终分析结果，例如 baseline 定义、visit window、人群 flag、治疗组使用 randomized 还是 actual、early termination visit 是否纳入、重复访视如何取值。这些地方如果没有明确依据，必须让统计师决策。
 
+## 0. 本指南在受控 MMRM 流水线中的位置
+
+本指南只覆盖**上游**工作：从 raw / SDTM 数据准备出 ADaM 级分析数据集。它**不是**正式 MMRM 分析程序的编写指南。
+
+正式分析程序由受控流水线确定性生成，规则见 `docs/mmrm/guides/study_workflow_CN.md` 和 `.codex/study-mmrm-analysis/references/`。两者的分工必须清楚：
+
+| | 本指南 | 受控流水线 |
+|---|---|---|
+| 范围 | raw → ADaM 分析数据集 | 已批准 analysis plan → 逐 TFL 自包含 R/SAS 程序 |
+| 产物 | ADaM 数据文件 + traceability 文档 | `analysis/r/<safe_analysis_id>.R`、`analysis/sas/<safe_analysis_id>.sas`、`analysis/r/run_all_mmrm.R` |
+| 谁写 | 数据准备 programmer（可借助本指南的模块化流程） | 生成器机械渲染，不允许手写或手改统计逻辑 |
+
+几条必须遵守的衔接规则：
+
+1. **一个 TFL 对应一个自包含 `.R` 和一个自包含 `.sas`。** 生成的 SAS 是完整程序，**不是 template**；生成的 R 是完整程序，**不是薄 wrapper**。不要手工编辑这两类文件的统计逻辑。
+2. 本指南准备好的 ADaM 文件，要以 `dataset.file` / `dataset.format` / `dataset.relative_path` / `dataset.sha256` 登记进 `analysis-plan.yaml`。当前受支持的 `format` 只有 `sas7bdat` 与 `csv`；不要交付 `.rds`（SAS 侧无法自包含读取，会被跨语言阻断）。
+3. **ADaM 数据还没准备好时**，对应 analysis 用 `dataset.binding_mode: planned`，`relative_path` 与 `sha256` 必须写 `null`。**绝对不要为了让流程往下走而填写假的路径或假的 SHA-256。** 此时生成的程序永久带 code-generation-only gate，不会执行、不会产生任何结果文件。
+4. **数据准备完成、文件真正落地之后**，必须重新编译 analysis plan（改为 `binding_mode: linked` 并填真实 `relative_path` 与真实 `sha256`）、重新 finalize、重新 approve-and-generate。**只把生成程序里的 `DATA_AVAILABLE` 改成 TRUE/YES 是无效且被禁止的。**
+5. 数据文件一旦登记，其 SHA-256 就被固定。linked 程序在读取数据前会用 `digest::digest(file = ..., algo = "sha256")`（SAS 侧为内联 `%verify_file_sha256`）校验；**重新生成或改动 ADaM 文件后必须重新登记 SHA 并重新批准**，否则程序会在建模前失败。程序永远不写入输入目录（SAS 的输入 `libname` 固定 `access=readonly`）。
+6. 统计师拿到生成程序后**只允许修改第 1 部分用户配置区**：R 是 `INPUT_DIR` / `OUTPUT_DIR`；SAS 是 `EXECUTE_APPROVED_PROGRAM` / `INPUT_DIR` / `OUTPUT_DIR`。也可以用 `--input-dir` / `--output-dir` 或 `MMRM_INPUT_DIR` / `MMRM_OUTPUT_DIR` 覆盖路径。**任何统计语义变更（含 baseline 定义、visit 映射、人群筛选、治疗组来源）都必须回到 `analysis-plan.yaml` 重新批准，不能在程序里改。**
+7. 本指南中的派生规则（baseline、visit window、人群、治疗组、分层因素）如果需要在分析程序中体现，必须以 `analysis-plan.yaml` 支持的结构表达：`mappings`、`derivations`（唯一内建操作是 typed `recode`）、`filters`、`groups`、`endpoint_definitions`。无法用这些结构表达的复杂转换要放进审批前创建且 SHA-pinned 的 adapter；如果 adapter 仍无法被确定性内联，生成会以 `PROGRAM-INLINE-ADAPTER-UNSUPPORTED:<analysis_id>` 阻断，且不会发布任何单语言产物。**正确做法是把该转换前移到本指南覆盖的 ADaM 准备阶段，让分析程序只消费已经准备好的变量。**
+8. **禁止从 `endpoint-mapping.yaml`、旧 `analysis-specification.md`、历史生成程序或任何 Markdown 自由文本迁移统计值。** 本指南产出的 traceability 文档是给统计师 review 用的人读材料，不是 runtime 统计来源。
+9. **SAS 从不由本流水线执行。** 无论有无数据，`.sas` 都只是代码交付物，由统计师在批准的目标环境（`sas-9.4m5-self-contained/v1`：SAS 9.4M5、UTF-8 会话）自行运行。collector 只运行 R；SAS 结果只能通过 `--mode=collect-only` 导入统计师提供的 run record。报告 SAS 状态时只能说"静态 / golden / conformance 校验通过"，**不得声称 SAS 运行行为已验收**。
+
+下面各节是 ADaM 数据准备的通用思考路径。
+
 ## 1. 读取原始数据
 
 首先确定 raw data 的目录，把所有需要的 SDTM/raw SAS datasets 或 Excel listing 读入 R。

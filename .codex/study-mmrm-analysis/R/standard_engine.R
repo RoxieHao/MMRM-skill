@@ -560,6 +560,24 @@ standard_sas_status <- function(analysis) {
   "template_generated_not_executed\uff1a\u5df2\u751f\u6210\u53ea\u8bfb SAS \u6a21\u677f\uff0c\u9ed8\u8ba4\u4e0d\u6267\u884c\u3002"
 }
 
+# 9.3 内部 engine 对齐：共享 engine 只保留作技术验证，且它写出的每个 R 侧产物文件名
+# 都必须直接来自新 contract 的 r_* 字段，不再使用任何 engine 私有文件名。
+# 它不是生成程序的依赖：生成的 .R/.sas 与 collector 都不 source 本文件。
+standard_engine_r_artifact_paths <- function(output_paths, analysis) {
+  if (is.null(output_paths)) return(NULL)
+  output <- analysis$output
+  expected <- c("r_raw_file", "r_final_file", "r_diagnostic_file", "r_run_record_file")
+  if (!is.list(output) || any(!expected %in% names(output))) {
+    stop("PLAN-SCHEMA-IDENTITY-OUTPUT-CLOSED-SHAPE: internal engine requires the r_* output fields of the current contract shape.")
+  }
+  list(
+    raw = file.path(output_paths$tables, as.character(output$r_raw_file)),
+    final = file.path(output_paths$tables, as.character(output$r_final_file)),
+    diagnostic = file.path(output_paths$diagnostics, as.character(output$r_diagnostic_file)),
+    run_record = file.path(output_paths$root, as.character(output$r_run_record_file))
+  )
+}
+
 standard_write_report <- function(path, analysis, diagnostics, status, risk, chain, output_paths = NULL, project_dir = NULL) {
   rel <- function(value) {
     if (is.null(value) || is.null(project_dir) || !nzchar(value)) return("")
@@ -569,7 +587,7 @@ standard_write_report <- function(path, analysis, diagnostics, status, risk, cha
   fallback_covariance <- paste(as.character(unlist(analysis$covariance$fallback, use.names = FALSE)), collapse = " -> ")
   if (!nzchar(fallback_covariance)) fallback_covariance <- "\u65e0"
   report_path <- if (is.null(output_paths)) "" else rel(output_paths$diagnostic_report)
-  diagnostic_csv <- if (is.null(output_paths)) "" else rel(output_paths$diagnostic_csv)
+  diagnostic_csv <- if (is.null(output_paths)) "" else rel(standard_engine_r_artifact_paths(output_paths, analysis)$diagnostic)
   log_file <- if (is.null(output_paths)) unique(as.character(diagnostics$log_file))[[1]] else rel(output_paths$log_file)
   manifest_path <- "output/tfl-output-manifest.csv"
   lines <- c(
@@ -619,7 +637,7 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_ap
   preflight_phase <- "approved_analysis_chain_gate"
   preflight <- tryCatch({
     chain <- assert_approved_analysis(paths$study_dir, project_dir, expected_analysis_id = analysis_id, pinned_approval_payload_sha256 = pinned_approval_payload_sha256, pinned_contract_sha256 = pinned_contract_sha256)
-    assert_analysis_execution_allowed(chain)
+    assert_analysis_execution_allowed(chain, analysis_id = analysis_id)
     analysis <- standard_contract_get_analysis(chain$contract, analysis_id)
     list(chain = chain, contract = chain$contract, contract_sha = chain$contract_sha256, analysis = analysis)
   }, error = function(e) e)
@@ -641,8 +659,9 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_ap
       cat(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " | ", paste0(..., collapse = ""), "\n", file = output_paths$log_file, append = TRUE, sep = "")
     }
   }
-  raw_path <- file.path(output_paths$tables, analysis$output$raw_file)
-  final_path <- file.path(output_paths$tables, analysis$output$final_file)
+  engine_paths <- standard_engine_r_artifact_paths(output_paths, analysis)
+  raw_path <- engine_paths$raw
+  final_path <- engine_paths$final
   failure_domain <- "environment"
   failure_phase <- "runtime_package_gate"
   prepared_data <- NULL
@@ -827,7 +846,7 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_ap
   log_line("writing analysis artifacts.")
   write_utf8_bom_csv(outcome$raw, raw_path)
   write_utf8_bom_csv(outcome$final, final_path)
-  write_utf8_bom_csv(outcome$diagnostics, output_paths$diagnostic_csv)
+  write_utf8_bom_csv(outcome$diagnostics, engine_paths$diagnostic)
   recode_identity <- list(
     invocation_id = invocation_id, run_id = run_id, study_id = as.character(contract$study$study_id), analysis_id = analysis_id,
     profile_version = standard_mmrm_profile_version(), review_sha256 = toupper(chain$review$sha256),
@@ -851,10 +870,10 @@ run_standard_mmrm_analysis_stage <- function(script_file, analysis_id, pinned_ap
     toupper(chain$review$sha256), toupper(attr(chain$plan, "sha256")), toupper(chain$approval_payload_sha256),
     toupper(contract_sha), analysis$tfl_id, "table", analysis$title, "approved", outcome$status, outcome$risk,
     project_relative_path(raw_path, project_dir), project_relative_path(final_path, project_dir),
-    project_relative_path(output_paths$diagnostic_csv, project_dir), project_relative_path(output_paths$diagnostic_report, project_dir),
+    project_relative_path(engine_paths$diagnostic, project_dir), project_relative_path(output_paths$diagnostic_report, project_dir),
     project_relative_path(output_paths$log_file, project_dir)
   )
-  write_utf8_bom_csv(record, output_paths$run_record)
+  write_utf8_bom_csv(record, engine_paths$run_record)
   log_line("run finished; status=", outcome$status, "; risk=", outcome$risk, ".")
   if (outcome$status %in% standard_terminal_failure_status()) stop("Standard MMRM analysis \u7ec8\u6b62\u5931\u8d25\uff1astatus=", outcome$status)
   invisible(outcome)

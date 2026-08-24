@@ -154,10 +154,10 @@ intake_sync_input_manifest <- function(study_dir, project_dir) {
   files <- list.files(input_dir, recursive = TRUE, full.names = TRUE, all.files = FALSE, no.. = TRUE)
   files <- files[file.exists(files) & !dir.exists(files)]
   files <- files[!grepl("^~\\$", basename(files))]  # 跳过 Office 临时锁文件
-  current_rel <- vapply(files, function(path) {
+  current_rel <- gsub("\\\\", "/", vapply(files, function(path) {
     normalized <- normalizePath(path, winslash = "/", mustWork = TRUE)
     file.path("input", gsub("\\\\", "/", substr(normalized, nchar(input_root) + 2L, nchar(normalized))))
-  }, character(1))
+  }, character(1)))
   names(files) <- current_rel
 
   # input/ 内已确认的 linked_source 仍是同一条审计记录，必须保留并持续校验；

@@ -1,6 +1,17 @@
 # Programming Note Template
 
-这份模板用于记录 analysis dataset 和 MMRM workflow 是如何实现的。
+## 适用范围（先读）
+
+这份模板**只用于上游 ADaM / analysis dataset 准备**的实现记录。
+
+它**不适用于**受控流水线生成的正式 TFL 分析程序。那些程序的规则是：
+
+- 一个 TFL 对应一个自包含 `analysis/r/<safe_analysis_id>.R` 和一个自包含 `analysis/sas/<safe_analysis_id>.sas`（SAS 是完整程序，**不是 template**；R 是完整程序，**不是薄 wrapper**）；
+- 程序由已批准 `analysis-plan.yaml` 和机械编译的 contract 确定性生成，八章结构固定；
+- 统计师**只允许修改第 1 部分用户配置区**（R 为 `INPUT_DIR` / `OUTPUT_DIR`；SAS 为 `EXECUTE_APPROVED_PROGRAM` / `INPUT_DIR` / `OUTPUT_DIR`），也可用 `--input-dir` / `--output-dir` 或 `MMRM_INPUT_DIR` / `MMRM_OUTPUT_DIR` 覆盖路径；
+- **任何统计语义变更必须回到 `analysis-plan.yaml` 重新批准并重新生成程序**，不得记录成"程序里手工调整过"。
+
+因此本模板中确认下来的规则，只能作为编译 `analysis-plan.yaml` 时的证据来源，**不能**用来解释或替代生成程序的内容。详见 `docs/mmrm/guides/study_workflow_CN.md`。
 
 不要用这份模板发明尚未确认的统计规则。
 如果 shell / SAP / 统计师审核还没有确认某条规则，就回到 question log，并保持实现阻塞。
