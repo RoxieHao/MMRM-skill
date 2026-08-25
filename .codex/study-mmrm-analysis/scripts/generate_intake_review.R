@@ -31,7 +31,7 @@ study_dir <- normalizePath(get_arg("study-dir"), winslash = "/", mustWork = TRUE
 replace_pending <- parse_logical_arg(get_arg("replace-pending", required = FALSE, default = "false"), "replace-pending")
 project_dir <- find_project_root(study_dir)
 skill_r <- file.path(project_dir, ".codex", "study-mmrm-analysis", "R")
-for (helper in c("dependencies.R", "canonical_hash.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R")) source(file.path(skill_r, helper), encoding = "UTF-8")
+for (helper in c("dependencies.R", "canonical_hash.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "runtime_dataset_profile.R")) source(file.path(skill_r, helper), encoding = "UTF-8")
 ensure_skill_packages()
 
 infer_intake_route <- function(study_dir) {
@@ -48,8 +48,8 @@ route <- get_arg("route", required = FALSE, default = infer_intake_route(study_d
 if (!route %in% c("statistician_authored", "ai_source_extraction")) stop("--route \u53ea\u80fd\u4e3a statistician_authored \u6216 ai_source_extraction\u3002")
 
 result <- write_intake_statistical_review(study_dir, project_dir, route, replace_pending = replace_pending)
-enrichment <- intake_enrich_review_with_adam(study_dir, project_dir, result$review_path)
+profile <- runtime_dataset_write_profile(study_dir, project_dir)
 cat("Generated pending intake statistical review with ", result$tfl_count, " MMRM TFL candidate table(s): ", result$review_path, "\n", sep = "")
-cat("Generated null-containing analysis plan template: ", result$analysis_plan_path, "\n", sep = "")
+cat("Generated null-containing analysis plan template (compiled only after review approval): ", result$analysis_plan_path, "\n", sep = "")
 cat("Intake scan trace: ", result$trace_path, "\n", sep = "")
-if (isTRUE(enrichment$enriched)) cat("Enriched intake review from ", enrichment$dataset_count, " ADaM dataset catalog item(s).\n", sep = "")
+cat("Full ADaM profile + specification projection for ", profile$dataset_count, " registered dataset(s) (AI Candidate Generation evidence): ", profile$path, "\n", sep = "")

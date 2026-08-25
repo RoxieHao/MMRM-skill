@@ -84,7 +84,7 @@ analyses:
       treatment_visit_lsmeans: null
       pairwise_differences: null
     treatment: null
-    # closed trace map：把稳定的 SRC-* / DEC-* ID 填进对应键。
+    # closed trace map：把 SRC-*（源证据 ID）与派生决定 ID（<TFL ID>/<规则类别>）填进对应键。
     trace:
       dataset: []
       adapter: []

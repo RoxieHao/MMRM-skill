@@ -22,7 +22,7 @@ analysis_approval_within_study <- function(real_path, study_root) startsWith(ana
 analysis_approval_target_allowed <- function(real_target, study_root) {
   if (!analysis_approval_within_study(real_target, study_root)) return(FALSE)
   rel <- substring(real_target, nchar(study_root) + 2L)
-  rel %in% c("statistician-review/statistical-review.md", "statistician-review/standard-mmrm-contract.yaml") ||
+  rel %in% c("statistician-review/statistical-review.md", "statistician-review/analysis-plan.yaml", "statistician-review/standard-mmrm-contract.yaml") ||
     analysis_approval_generator_owned_relative(rel)
 }
 # generator 拥有的 program 文件：analysis/r/*.R 与 analysis/sas/*.sas（含历史 *_template.sas）。
@@ -129,7 +129,7 @@ analysis_approval_recover <- function(study_dir) {
 assert_approved_analysis <- function(study_dir, project_dir, expected_analysis_id = NULL, pinned_approval_payload_sha256 = NULL, pinned_contract_sha256 = NULL) {
   review <- read_statistical_review(file.path(study_dir, "statistician-review", "statistical-review.md")); metadata <- review$metadata
   required <- c("review_schema_version", "study_id", "review_status", "reviewed_by", "reviewed_at_utc", "finalization_status", "analysis_plan_file", "analysis_plan_sha256", "source_evidence_sha256", "review_execution_content_sha256", "approval_payload_sha256")
-  if (any(!required %in% names(metadata)) || !identical(as.character(metadata$review_schema_version), "2.0") || !identical(as.character(metadata$review_status), "approved") || !identical(as.character(metadata$finalization_status), "ready_for_final_signature") || !nzchar(as.character(metadata$reviewed_by)) || !statistical_review_iso_utc(metadata$reviewed_at_utc)) stop("PLAN-HASH-APPROVAL: review is not validly approved.")
+  if (any(!required %in% names(metadata)) || !identical(as.character(metadata$review_schema_version), "2.0") || !identical(as.character(metadata$review_status), "approved") || !identical(as.character(metadata$finalization_status), "published") || !nzchar(as.character(metadata$reviewed_by)) || !statistical_review_iso_utc(metadata$reviewed_at_utc)) stop("PLAN-HASH-APPROVAL: review is not validly approved.")
   registry <- source_evidence_registry(project_dir, study_dir); source_sha <- source_evidence_sha256(registry)
   plan <- read_analysis_plan(analysis_plan_path(study_dir), statistical_review_trace_ids(review, registry$ids)); plan_sha <- attr(plan, "sha256")
   assert_analysis_study_identity(study_dir, review, plan)
@@ -257,19 +257,20 @@ analysis_transaction_publish <- function(files, journal, fail_after = Inf, delet
   if (unlink(journal, force = TRUE) != 0L) stop("PLAN-HASH-TRANSACTION: unable to remove completed transaction journal: ", journal)
   invisible(targets)
 }
-approve_and_generate_analysis <- function(study_dir, project_dir, reviewer, fail_after = Inf) {
-  if (!nzchar(trimws(reviewer))) stop("reviewer must be nonempty."); analysis_approval_recover(study_dir)
+# Phase 7: 只消费已由 R finalization 发布的 approved/published review + 正式 plan；不再修改 review status，
+# 也不重签统计决定。reviewer 仅作为执行授权/audit actor，不覆盖 review 的 reviewed_by。
+approve_and_generate_analysis <- function(study_dir, project_dir, reviewer = NULL, fail_after = Inf) {
+  analysis_approval_recover(study_dir)
   review_path <- file.path(study_dir, "statistician-review", "statistical-review.md"); review <- read_statistical_review(review_path)
-  if (!identical(as.character(review$metadata$finalization_status), "ready_for_final_signature")) stop("Review is not ready for final signature.")
+  if (!identical(as.character(review$metadata$review_status), "approved") || !identical(as.character(review$metadata$finalization_status), "published")) stop("Review is not approved/published; run Compile Analysis Plan and finalization before generation.")
   issues <- statistical_review_issues(review); if (nrow(issues) && any(trimws(as.character(issues$status)) != "resolved")) stop("Review has unresolved issues.")
   registry <- source_evidence_registry(project_dir, study_dir); plan <- read_analysis_plan(analysis_plan_path(study_dir), statistical_review_trace_ids(review, registry$ids)); assert_analysis_study_identity(study_dir, review, plan); plan_sha <- attr(plan, "sha256"); source_sha <- source_evidence_sha256(registry); payload <- approval_payload(review, plan_sha, source_sha); payload_sha <- approval_payload_sha256(payload)
   expected <- list(analysis_plan_sha256 = plan_sha, source_evidence_sha256 = source_sha, review_execution_content_sha256 = payload$review_execution_content_sha256, approval_payload_sha256 = payload_sha)
-  for (name in names(expected)) if (!identical(toupper(as.character(review$metadata[[name]])), toupper(expected[[name]]))) stop("PLAN-HASH-FINALIZATION: review must be finalized again before approval: ", name)
-  approved_at <- format(Sys.time(), tz = "UTC", format = "%Y-%m-%dT%H:%M:%SZ"); approved_lines <- statistical_review_set_metadata(review$lines, "review_status", "approved"); approved_lines <- statistical_review_set_metadata(approved_lines, "reviewed_by", trimws(reviewer)); approved_lines <- statistical_review_set_metadata(approved_lines, "reviewed_at_utc", approved_at)
-  review_temp <- tempfile("approved-review-", fileext = ".md"); contract_temp <- tempfile("contract-", fileext = ".yaml"); on.exit(unlink(c(review_temp, contract_temp), force = TRUE), add = TRUE); writeLines(approved_lines, review_temp, useBytes = TRUE); review_sha <- file_sha256(review_temp)
-  approval <- list(review_file = project_relative_path(review_path, project_dir), review_sha256 = review_sha, analysis_plan_file = project_relative_path(analysis_plan_path(study_dir), project_dir), analysis_plan_sha256 = plan_sha, approval_payload_sha256 = payload_sha, source_evidence_sha256 = source_sha, reviewed_by = trimws(reviewer), approved_at_utc = approved_at)
+  for (name in names(expected)) if (!identical(toupper(as.character(review$metadata[[name]])), toupper(expected[[name]]))) stop("PLAN-HASH-FINALIZATION: approved review is stale; recompile and finalize before generation: ", name)
+  contract_temp <- tempfile("contract-", fileext = ".yaml"); on.exit(unlink(contract_temp, force = TRUE), add = TRUE)
+  approval <- list(review_file = project_relative_path(review_path, project_dir), review_sha256 = review$sha256, analysis_plan_file = project_relative_path(analysis_plan_path(study_dir), project_dir), analysis_plan_sha256 = plan_sha, approval_payload_sha256 = payload_sha, source_evidence_sha256 = source_sha, reviewed_by = as.character(review$metadata$reviewed_by), approved_at_utc = as.character(review$metadata$reviewed_at_utc))
   contract <- compile_analysis_plan_contract(plan, approval); analysis_validate_adapter_pins(contract, project_dir); write_standard_mmrm_contract(contract, contract_temp); staged_contract <- read_standard_mmrm_contract(contract_temp); assert_analysis_study_identity(study_dir, review, plan, staged_contract); assert_plan_contract_parity(plan, staged_contract); contract_sha <- attr(staged_contract, "sha256")
-  rendered <- analysis_render_generated(study_dir, project_dir, staged_contract, payload_sha, contract_sha); files <- c(setNames(list(approved_lines), review_path), setNames(list(readLines(contract_temp, warn = FALSE)), analysis_contract_path(study_dir)), rendered)
+  rendered <- analysis_render_generated(study_dir, project_dir, staged_contract, payload_sha, contract_sha); files <- c(setNames(list(readLines(contract_temp, warn = FALSE)), analysis_contract_path(study_dir)), rendered)
   obsolete <- c(if (file.exists(analysis_contract_path(study_dir))) analysis_obsolete_generated_targets(study_dir, read_standard_mmrm_contract(analysis_contract_path(study_dir)), rendered) else character(), setdiff(analysis_legacy_template_targets(study_dir, staged_contract), names(rendered)))
   obsolete <- unique(obsolete[file.exists(obsolete)])
   # 运行证据不参与本 transaction：removed analysis 的 raw/final/diagnostic/run-record/manifest

@@ -7,7 +7,7 @@ intake_candidate_rule_categories <- function() {
 
 intake_candidate_table_columns <- function() {
   if (exists("statistical_review_candidate_table_columns", mode = "function", inherits = TRUE)) return(statistical_review_candidate_table_columns())
-  c("规则类别", "AI 识别的候选规则", "证据来源与识别状态", "Standard MMRM Profile v1 评估", "统计师审阅意见", "decision_id")
+  c("规则类别", "AI 识别的候选规则", "证据来源与识别状态", "Standard MMRM Profile v1 评估", "统计师审阅意见")
 }
 
 intake_markdown_split_row <- function(line) {
@@ -207,94 +207,21 @@ intake_detect_tfls_in_text <- function(lines, ref_fun) {
   lapply(by_id, function(items) items[[which.max(vapply(items, `[[`, numeric(1), "evidence_score"))]])
 }
 
+# R 只生成五列十类候选骨架，并把已登记 evidence（TFL source_ref、profile、specification）指给显式的
+# AI Candidate Generation step 去填写。R 不猜测 dataset/PARAMCD/模型，也不硬编码任何 study 专属内容；
+# 唯一确定的候选由 AI 从 registered input 与 profile/spec 得出，无法唯一确定时写“未识别/当前不可执行”并建 Section 7 issue。
 intake_candidate_rows <- function(tfl) {
-  if (identical(tfl$source_kind, "statistician_briefing")) {
-    fields <- tfl$fields
-    value <- function(name, default = "未识别") {
-      item <- fields[[name]]
-      if (is.null(item) || !nzchar(trimws(as.character(item)))) default else trimws(as.character(item))
-    }
-    has_field <- function(name) !identical(value(name), "未识别")
-    window <- paste(tfl$window, collapse = "\n")
-    text_or_unknown <- function(pattern, label) if (grepl(pattern, window, ignore.case = TRUE, perl = TRUE)) label else "未识别"
-    candidate <- c(
-      value("source_dataset"),
-      paste0(value("analysis_population"), "; ", value("population_rule")),
-      paste0(value("endpoint_variable"), " in ", value("endpoint_codes")),
-      "instrument/version/reporter/subscale 未识别；如 TFL 需要分量表或报告者分层，统计师需补充",
-      paste0("response=", value("response_variable"), "; baseline=", value("baseline_variable")),
-      paste0("visit=", value("visit_variable")),
-      text_or_unknown("one row|每个.*一行|subject.*visit|受试者.*访视", "每个 subject × endpoint × visit 最多一行；具体去重规则待统计师确认"),
-      text_or_unknown("fixed_effects|fixed effects|baseline|visit|treatment|region|country", "从 TFL briefing 自然语言识别固定效应；需统计师逐行确认"),
-      text_or_unknown("UN|AR\\(1\\)|CS|Kenward|Roger|covariance", "从 TFL briefing 自然语言识别协方差/自由度；需统计师逐行确认"),
-      text_or_unknown("LSMean|difference|p-value|CI|估计|输出", "从 TFL briefing 自然语言识别估计量/输出；AI 后续生成 estimate_id")
-    )
-    evidence <- paste0(tfl$source_ref, "；statistician-analysis-input.md structured briefing")
-    rows <- data.frame(
-      "规则类别" = intake_candidate_rule_categories(),
-      "AI 识别的候选规则" = candidate,
-      "证据来源与识别状态" = rep(evidence, 10L),
-      "Standard MMRM Profile v1 评估" = c(
-        if (has_field("source_dataset")) "可表达，待数据核对" else "当前不可执行",
-        if (has_field("analysis_population") || has_field("population_rule")) "可表达，待统计师确认" else "需要补充规则",
-        if (has_field("endpoint_variable") && has_field("endpoint_codes")) "可表达，待数据核对" else "当前不可执行",
-        "需要补充规则",
-        if (has_field("response_variable")) "可表达，待数据核对" else "当前不可执行",
-        if (has_field("visit_variable")) "可表达，待数据核对" else "需要补充规则",
-        "需要补充规则",
-        if (candidate[[8]] != "未识别") "可表达，待统计师确认" else "需要补充规则",
-        if (candidate[[9]] != "未识别") "可表达，待统计师确认" else "需要补充规则",
-        if (candidate[[10]] != "未识别") "可表达，待统计师确认" else "需要补充规则"
-      ),
-      "统计师审阅意见" = rep("", 10L),
-      "decision_id" = paste0("DEC-", gsub("[^A-Za-z0-9]+", "-", toupper(tfl$tfl_id)), "-", sprintf("%02d", seq_len(10L))),
-      stringsAsFactors = FALSE,
-      check.names = FALSE
-    )
-    names(rows) <- intake_candidate_table_columns()
-    return(rows)
-  }
-  window <- paste(tfl$window, collapse = "\n")
-  has <- function(pattern) grepl(pattern, window, ignore.case = TRUE, perl = TRUE)
-  coafl <- if (grepl("COA.?分析集", tfl$title, perl = TRUE)) "COA 分析集；具体分析标志未识别" else "未识别"
-  endpoint <- if (grepl("PedsQL", tfl$title, ignore.case = TRUE)) "PedsQL 总分及可能的分量表；终点变量和 PARAMCD 未识别" else if (grepl("疼痛强度", tfl$title, fixed = TRUE)) "疼痛强度；终点变量和 PARAMCD 未识别" else if (grepl("疼痛干扰", tfl$title, fixed = TRUE)) "疼痛干扰；终点变量和 PARAMCD 未识别" else if (grepl("肌力", tfl$title, fixed = TRUE)) "肌力评估；终点变量和 PARAMCD 未识别" else if (grepl("关节活动范围", tfl$title, fixed = TRUE)) "关节活动范围；终点变量和 PARAMCD 未识别" else "未识别"
-  dimensions <- if (has("受试者报告|家长报告")) "报告者可能区分患者和家长；量表、版本和分量表未识别" else "量表、版本、报告者和分量表未识别"
-  response_baseline <- if (has("model\\s+CHG|CHG")) "响应变量候选 `CHG`；基线变量候选 `BASE`" else "相对基线变化为候选响应；变量名未识别"
-  visit <- if (has("AVISITN|avisitn")) "访视变量候选 `AVISITN`；访视窗口和窗口内选择规则未识别" else "访视、窗口和窗口内选择规则未识别"
-  fixed <- if (has("model\\s+CHG.*avisitn.*region.*base")) "访视、地区、基线、基线×访视" else if (has("基线分数.*检查周期.*地区")) "访视、地区、基线、基线×访视" else "未识别"
-  covariance <- if (has("无结构型|type\\s*=\\s*un")) "UN；不收敛时 AR1；Kenward–Roger" else "协方差和自由度未识别"
-  estimand <- if (has("lsmeans|校正均值")) "各访视校正均值、95% CI 和 P 值" else "未识别"
-  evidence <- function(extra = "") paste0(tfl$source_ref, "；", if (nzchar(extra)) extra else "候选")
+  categories <- intake_candidate_rule_categories()
+  evidence <- paste0(tfl$source_ref, "；已登记 evidence：backup-trace/intake-mmrm-profile.yaml（变量、类型、真实水平、PARAMCD/PARAM、treatment levels 与 specification 对齐）及 ADaM specification / SAP / shell")
   rows <- data.frame(
-    "规则类别" = intake_candidate_rule_categories(),
-    "AI 识别的候选规则" = c(
-      "未识别；需从候选 ADaM 数据集和 ADaM specification 核对",
-      coafl,
-      endpoint,
-      dimensions,
-      response_baseline,
-      visit,
-      "每个受试者 × 终点 × 访视最多一行；具体去重和行分配规则未识别",
-      fixed,
-      covariance,
-      estimand
-    ),
-    "证据来源与识别状态" = c(
-      evidence("未识别"), evidence(if (coafl == "未识别") "未识别" else "候选"), evidence("候选"),
-      evidence(if (has("受试者报告|家长报告")) "候选" else "未识别"), evidence(if (has("CHG")) "候选" else "未识别"),
-      evidence(if (has("AVISITN|avisitn")) "候选" else "未识别"), evidence("Standard Profile v1 要求；需数据核对"),
-      evidence(if (fixed == "未识别") "未识别" else "候选"), evidence(if (has("无结构型|type\\s*=\\s*un")) "候选" else "未识别"),
-      evidence(if (has("lsmeans|校正均值")) "候选" else "未识别")
-    ),
-    "Standard MMRM Profile v1 评估" = c(
-      "当前不可执行", "需要补充规则", "当前不可执行", "需要补充规则", "可表达，待数据核对",
-      "需要补充规则", "需要补充规则", if (fixed != "未识别" && grepl("地区", fixed, fixed = TRUE)) "需要 Profile 扩展" else "需要补充规则",
-      if (has("无结构型|type\\s*=\\s*un")) "可表达，待统计师确认" else "需要补充规则", if (has("lsmeans|校正均值")) "可表达，待统计师确认" else "需要补充规则"
-    ),
-    "统计师审阅意见" = rep("", 10L),
-    "decision_id" = paste0("DEC-", gsub("[^A-Za-z0-9]+", "-", toupper(tfl$tfl_id)), "-", sprintf("%02d", seq_len(10L))),
+    "规则类别" = categories,
+    "AI 识别的候选规则" = rep("待 AI Candidate Generation 填写：依据 registered input 与 profile/specification 给出唯一、带证据的候选；无法唯一确定时写“未识别/当前不可执行”并在第 7 节建 issue", length(categories)),
+    "证据来源与识别状态" = rep(evidence, length(categories)),
+    "Standard MMRM Profile v1 评估" = rep("待 AI Candidate Generation 评估", length(categories)),
+    "统计师审阅意见" = rep("", length(categories)),
     stringsAsFactors = FALSE, check.names = FALSE
   )
+  names(rows) <- intake_candidate_table_columns()
   rows
 }
 
@@ -345,47 +272,10 @@ intake_render_candidate_block <- function(tfl) {
     paste0("### 表 ", sub("^表", "", tfl$tfl_id), "：", tfl$title),
     "",
     paste0("| ", paste(intake_candidate_table_columns(), collapse = " | "), " |"),
-    "|---|---|---|---|---|---|",
+    paste0("|", paste(rep("---", length(intake_candidate_table_columns())), collapse = "|"), "|"),
     vapply(seq_len(nrow(rows)), function(i) paste0("| ", paste(vapply(rows[i, , drop = FALSE], intake_escape_markdown, character(1)), collapse = " | "), " |"), character(1))
   )
   c(table, "")
-}
-
-intake_render_review <- function(study_dir, project_dir, route, discovery) {
-  study_id <- basename(normalizePath(study_dir, winslash = "/", mustWork = TRUE))
-  manifest_relative <- project_relative_path(discovery$manifest$path, project_dir)
-  manifest_hash <- toupper(file_sha256(discovery$manifest$path))
-  candidate_blocks <- if (length(discovery$tfls)) unlist(lapply(discovery$tfls, intake_render_candidate_block), use.names = FALSE) else c(
-    "未发现明确的 MMRM TFL；统计师可在此补充材料或明确不适用。", ""
-  )
-  issues <- if (length(discovery$tfls)) c(
-    "| issue_id | scope | question_or_risk | resolution | status |",
-    "|---|---|---|---|---|",
-    "| INTAKE-001 | ALL | 所有候选 TFL 的统计规则必须明确决定并编译进完整 Analysis Plan。 | 待统计师处置 | unresolved |"
-  ) else c(
-    "| issue_id | scope | question_or_risk | resolution | status |",
-    "|---|---|---|---|---|",
-    "| INTAKE-001 | ALL | 当前 registered input 中未发现明确 MMRM TFL。 | 待统计师确认是否补充材料或声明不适用 | unresolved |"
-  )
-  metadata <- c(
-    "---", "review_schema_version: '2.0'", paste0("study_id: ", study_id), paste0("generation_route: ", route),
-    "review_status: pending", "reviewed_by: ''", "reviewed_at_utc: ''", "finalization_status: pending",
-    paste0("source_manifest_file: ", manifest_relative), "analysis_plan_file: ''", "analysis_plan_sha256: ''", "source_evidence_sha256: ''", "review_execution_content_sha256: ''", "approval_payload_sha256: ''", "---", ""
-  )
-  body <- c(
-    "# 统计师 MMRM 审阅", "",
-    "> 本文件是人工审阅与签名界面。AI 候选仅来自已登记的当前 study input；analysis-plan.yaml 是唯一机器可执行统计语义。", "",
-    "## 1. 审阅结论与签核", "当前为 pending。统计师必须处置候选规则并解决全部 Issues；AI 不得签名或从 defaults 填补未决定值。", "",
-    "## 2. Study 与数据范围", paste0("Study：", study_id, "。已扫描 ", nrow(discovery$sources), " 个已登记文本材料，识别 ", length(discovery$tfls), " 个明确 MMRM TFL。"), "",
-    "## 3. Analysis 与 TFL 清单", "统计师填写审阅意见；AI 按 stable decision_id 编译完整 typed Analysis Plan。R 不从自由文本推断执行参数。", "",
-    candidate_blocks,
-    "## 4. Analysis Plan（只读）", "<!-- ANALYSIS_PLAN_BEGIN -->", "Pending compilation.", "<!-- ANALYSIS_PLAN_END -->", "",
-    "## 5. 模型、协方差与估计量确认", "所有模型、协方差、自由度和估计量必须在 Analysis Plan 中显式批准。", "",
-    "## 6. Adapter / 派生 / 行分配确认", "Set selection 使用 in；typed recode 显式声明 policies；复杂转换使用批准且 SHA-pinned 的 adapter。", "",
-    "## 7. 未解决问题与决议", issues, "",
-    "## 8. Approval Payload 指纹", "Pending finalization."
-  )
-  c(metadata, body)
 }
 
 # Analysis-plan workflow overrides. Markdown is evidence/reviewer interface only.
@@ -396,8 +286,8 @@ intake_render_review <- function(study_dir, project_dir, route, discovery) {
   c("---", "review_schema_version: '2.0'", paste0("study_id: '", study_id, "'"), paste0("generation_route: '", route, "'"), "review_status: 'pending'", "reviewed_by: ''", "reviewed_at_utc: ''", "finalization_status: 'pending'", paste0("source_manifest_file: '", manifest_relative, "'"), "analysis_plan_file: ''", "analysis_plan_sha256: ''", "source_evidence_sha256: ''", "review_execution_content_sha256: ''", "approval_payload_sha256: ''", "---", "",
     "# 统计师 MMRM 审阅", "", "> 统计师只编辑本 Markdown 的审阅意见和 issue resolution。analysis-plan.yaml 由显式 Compile Analysis Plan agent step 生成；R 不从自由文本推断执行参数。", "",
     "## 1. 审阅结论与签核", "当前为 pending；签核字段由 approve_and_generate_analysis.R 在通过全部 gate 后写入。", "",
-    "## 2. Study 与数据范围", paste0("Study：", study_id, "。Registered evidence manifest：", manifest_relative, "。"), "",
-    "## 3. Analysis 与 TFL 清单", "每一行的 decision_id 是稳定 trace ID。统计师只编辑“统计师审阅意见”单元格，并须保持在同一 Markdown 物理行；需要换行时使用 <br>。不得在候选 TFL 标题下新增或粘贴其他 Markdown 表格；歧义必须保留并形成 issue。", "", candidate_blocks,
+    "## 2. Study 与数据范围", paste0("Study：", study_id, "。Registered evidence：manifest ", manifest_relative, "；全量 ADaM profile backup-trace/intake-mmrm-profile.yaml（变量、类型、真实水平、PARAMCD/PARAM、treatment levels 与 specification 对齐）。"), "",
+    "## 3. Analysis 与 TFL 清单", "候选与证据单元格由显式 AI Candidate Generation step 依据 registered input 与 profile/specification 填写；trace ID 由 <TFL ID>/<规则类别> 自动派生。统计师只编辑“统计师审阅意见”单元格，并须保持在同一 Markdown 物理行；需要换行时使用 <br>。不得在候选 TFL 标题下新增或粘贴其他 Markdown 表格；歧义必须保留并形成 issue。", "", candidate_blocks,
     "## 4. Analysis Plan（只读）", "<!-- ANALYSIS_PLAN_BEGIN -->", "Pending: compile and validate analysis-plan.yaml.", "<!-- ANALYSIS_PLAN_END -->", "",
     "## 5. 模型、协方差与估计量确认", "完整 typed values 仅见第 4 节只读渲染；本节是人类审阅记录，不是执行输入。", "",
     "## 6. Adapter / 派生 / 行分配确认", "Adapter 必须 SHA-pinned；built-in derivation 仅支持 typed recode；复杂转换必须使用批准 adapter。", "",

@@ -29,7 +29,7 @@ self_check <- parse_logical_arg(get_arg("self-check", required = FALSE, default 
 if (self_check) {
   project_dir <- find_project_root(getwd())
   skill_dir <- file.path(project_dir, ".codex", "study-mmrm-analysis")
-  for (helper in c("canonical_hash.R", "standard_contract.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R", "review_finalization.R")) {
+  for (helper in c("canonical_hash.R", "standard_contract.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "analysis_approval.R", "review_finalization.R")) {
     source(file.path(skill_dir, "R", helper), encoding = "UTF-8")
   }
   review_finalization_self_check()
@@ -40,10 +40,11 @@ if (self_check) {
 study_dir <- normalizePath(get_arg("study-dir"), winslash = "/", mustWork = TRUE)
 project_dir <- find_project_root(study_dir)
 skill_dir <- file.path(project_dir, ".codex", "study-mmrm-analysis")
-for (helper in c("canonical_hash.R", "standard_contract.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "intake_enrichment.R", "review_finalization.R")) {
+for (helper in c("canonical_hash.R", "standard_contract.R", "standard_analysis_definition.R", "analysis_plan.R", "io.R", "specification.R", "intake_extraction.R", "intake_review.R", "runtime_dataset_binding.R", "analysis_approval.R", "review_finalization.R")) {
   source(file.path(skill_dir, "R", helper), encoding = "UTF-8")
 }
 
+reviewer <- get_arg("reviewer")
 formal_review <- file.path(study_dir, "statistician-review", "statistical-review.md")
 filled_candidates <- c(file.path(study_dir, "statistician-review", "statistical-review_filled.md"), file.path(study_dir, "statistician-review", "statistical-review-filled.md"))
 existing_filled <- filled_candidates[file.exists(filled_candidates)]
@@ -55,27 +56,27 @@ allow_unresolved <- parse_logical_arg(get_arg("allow-unresolved", required = FAL
 result_path <- get_arg("result-file", required = FALSE, default = review_finalization_result_path(study_dir))
 
 result <- tryCatch(
-  finalize_statistical_review(study_dir, source_review, target_review, allow_unresolved = allow_unresolved),
+  finalize_statistical_review(study_dir, source_review, target_review, reviewer, allow_unresolved = allow_unresolved),
   error = function(e) {
     issue <- review_finalize_issue_frame("PLAN-SCHEMA-FINALIZATION", "ALL", "finalization", conditionMessage(e), "successful analysis-plan finalization", "Correct the reported finalization error and run finalization again.")
     list(
       target_review = normalizePath(target_review, winslash = "/", mustWork = FALSE), analysis_count = 0L, issue_count = 1L,
-      ready_for_final_signature = FALSE, issues = issue, report = conditionMessage(e), published = FALSE
+      approved = FALSE, issues = issue, report = conditionMessage(e), published = FALSE
     )
   }
 )
 result_artifact <- review_finalization_write_result(result_path, result, source_review, target_review)
 cat("Finalization result artifact: ", result_artifact, "\n", sep = "")
-if (!isTRUE(result$ready_for_final_signature)) {
+if (!isTRUE(result$approved)) {
   cat(result$report, "\n", sep = "")
   if (isTRUE(result$published)) {
-    cat("Published a non-signable review with generated Section 7 issues; resolve them and finalize again before signature.\n")
+    cat("Published a blocked review with generated Section 7 issues; the formal analysis plan was left unchanged. Resolve the issues, recompile, and finalize again.\n")
   } else {
     cat("No review, analysis plan, or manifest files were changed.\n")
   }
   quit(status = 2)
 }
-cat("Finalized statistical review: ", result$target_review, "\n", sep = "")
+cat("Approved and published formal analysis plan + review: ", result$target_review, "\n", sep = "")
 cat("Analysis definitions: ", result$analysis_count, "\n", sep = "")
 cat("Review issues: ", result$issue_count, "\n", sep = "")
-cat("Ready for final signature: ", if (isTRUE(result$ready_for_final_signature)) "true" else "false", "\n", sep = "")
+cat("Review status: approved; finalization status: published.\n")

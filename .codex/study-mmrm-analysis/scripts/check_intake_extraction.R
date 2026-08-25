@@ -6,7 +6,7 @@ tmp <- tempfile("zz_intake_extraction_", tmpdir = file.path(project_dir, "studie
 shell <- file.path(tmp, "input", "shell", "mmrm-shell.txt"); writeLines(c("表14.2.1 Synthetic MMRM Summary", "重复测量的混合模型（MMRM）", "model CHG = AVISITN BASE"), shell, useBytes = TRUE)
 result <- write_intake_statistical_review(tmp, project_dir, "ai_source_extraction")
 stopifnot(file.exists(result$review_path), file.exists(result$analysis_plan_path), file.exists(result$trace_path), result$tfl_count == 1L)
-review <- read_statistical_review(result$review_path); tables <- parse_statistical_review_candidate_tables(review); stopifnot(identical(as.character(review$metadata$review_schema_version), "2.0"), identical(as.character(review$metadata$review_status), "pending"), length(tables) == 1L, all(grepl("^DEC-", tables[[1]]$table$decision_id)))
+review <- read_statistical_review(result$review_path); tables <- parse_statistical_review_candidate_tables(review); stopifnot(identical(as.character(review$metadata$review_schema_version), "2.0"), identical(as.character(review$metadata$review_status), "pending"), length(tables) == 1L, identical(names(tables[[1]]$table), statistical_review_candidate_table_columns()), length(statistical_review_candidate_table_columns()) == 5L, !("decision_id" %in% names(tables[[1]]$table)), identical(statistical_review_trace_ids(review), paste0(tables[[1]]$tfl_id, "/", statistical_review_candidate_rule_categories())))
 plan <- yaml::read_yaml(result$analysis_plan_path, eval.expr = FALSE); stopifnot(identical(plan$analysis_plan_schema_version, "2.1"), is.null(plan$execution_context$data_availability), is.null(plan$analyses[[1]]$dataset$file), is.null(plan$analyses[[1]]$df_method), identical(plan$analyses[[1]]$derivations, list()))
 review_text <- paste(readLines(result$review_path, encoding = "UTF-8", warn = FALSE), collapse = "\n")
 stopifnot(
@@ -50,9 +50,9 @@ assert_intake_replacement_blocked <- function(review_status, finalization_status
   stopifnot(inherits(blocked, "try-error"), identical(digest::digest(file = result$review_path, algo = "sha256"), review_before), identical(digest::digest(file = result$analysis_plan_path, algo = "sha256"), plan_before))
 }
 
-assert_intake_replacement_blocked("pending", "ready_for_final_signature")
+assert_intake_replacement_blocked("approved", "published")
 assert_intake_replacement_blocked("pending", "blocked_pending_resolution")
-assert_intake_replacement_blocked("approved", "ready_for_final_signature")
+assert_intake_replacement_blocked("ready_for_compilation", "pending")
 
 lines <- readLines(result$review_path, encoding = "UTF-8", warn = FALSE)
 lines <- statistical_review_set_metadata(lines, "review_status", "pending")

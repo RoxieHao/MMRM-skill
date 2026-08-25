@@ -8,10 +8,12 @@ description: 用于构建由统计师审阅 Markdown、批准的 typed analysis 
 ## 唯一语义链
 
 ```text
-statistician-review/statistical-review.md        人工审阅与签名界面
-                ↓ Compile Analysis Plan
-statistician-review/analysis-plan.yaml           唯一机器可执行统计语义（schema 2.1）
-                ↓ approve_and_generate
+statistician-review/statistical-review.md        人工审阅与签名界面（AI 候选 + 统计师决定）
+                ↓ Compile Analysis Plan（只读 review）
+statistician-review/analysis-plan.candidate.yaml 候选 plan（待 R 校验）
+                ↓ finalize（R 校验 candidate 后原子发布，review 置 approved/published）
+statistician-review/analysis-plan.yaml           正式机器可执行统计语义（schema 2.1）
+                ↓ approve_and_generate（只消费 approved）
 statistician-review/standard-mmrm-contract.yaml  机械编译的 runtime contract
                 ↓ 逐 analysis/TFL 确定性渲染
 analysis/r/<safe_analysis_id>.R                  自包含 R 程序
@@ -21,7 +23,7 @@ analysis/r/run_all_mmrm.R                        便利 collector
 output/analyses/<safe_analysis_id>/ + output/tfl-output-manifest.csv
 ```
 
-统计师编辑 Markdown，不要求编辑嵌套 YAML。AI 可根据当前 study 已登记证据和明确审阅决定重建 `analysis-plan.yaml`，但不得签名、不得从 profile defaults 填补未决定值。缺失或含糊值必须保持 `null` 并阻断 finalization。
+统计师编辑 Markdown，不要求编辑嵌套 YAML。AI 只读 review 编译候选 `analysis-plan.candidate.yaml`；R finalization 校验通过后才用原子事务发布正式 `analysis-plan.yaml` 并把 review 置为 `approved`。AI 不得签名、不得从 profile defaults 填补未决定值。缺失或含糊值必须保持 `null` 并阻断发布。状态流转 `pending → ready_for_compilation → approved` 由 AI/R 自动管理，统计师只显式触发 Compile。
 
 ## 交付模型（必须先理解）
 
@@ -47,16 +49,17 @@ output/analyses/<safe_analysis_id>/ + output/tfl-output-manifest.csv
 ## 受控工作流
 
 1. `scripts/init_study.ps1 -StudyDir <study>` 初始化目录。
-2. 将当前 study source 放入 `input/`，运行 `scripts/generate_intake_review.R --study-dir=<study>`；它创建 pending review 和 null-containing plan template。
-3. 统计师只在 review 中填写 comments 和 issue resolutions。
-4. AI 按 `references/analysis-plan-compilation.md` 执行 **Compile Analysis Plan**，只替换 `analysis-plan.yaml`。所有分析必须完整、自包含并带 closed trace map，并按上一节规则选定 `binding_mode`。
-5. 运行 `scripts/finalize_statistical_review.R --study-dir=<study>`；读取 finalization result，必须达到 `ready_for_final_signature: true` 且零 unresolved issues。
-6. 统计师授权后，仅运行：
+2. 将当前 study source 放入 `input/`，运行 `scripts/generate_intake_review.R --study-dir=<study>`；它由确定性 R intake 发现 TFL，生成 pending review 骨架（八个 section + 每个 TFL 一张五列十类规则候选表，候选/证据单元格留给下一步 AI 填写），并生成全量 ADaM profile `backup-trace/intake-mmrm-profile.yaml`（变量、类型、真实水平、PARAMCD/PARAM、treatment levels 与 specification 变量级对齐）。同时写出仅作占位的 null-containing `analysis-plan.yaml` 模板——它在 Compile 之前**不是**正式决策来源，统计师不编辑它。
+3. **AI Candidate Generation**：AI 读取全部 registered input、`backup-trace/intake-mmrm-profile.yaml`、SAP、shell 和 ADaM specification extraction，为每个 TFL 的十类规则填写唯一、明确、带证据的候选规则与识别状态，写回同一个 `statistical-review.md`。必须充分利用 profile/spec 的真实变量、类型、PARAMCD、treatment levels 和 specification 变量定义；无法唯一确定的项写“未识别/当前不可执行”并在第 7 节建 issue，**不得只罗列所有可能 dataset 或 PARAMCD**。AI 不写 YAML、不签名、不从 profile defaults 填补未决定值。
+4. 统计师只在 review 中填写“统计师审阅意见”和 issue resolutions。
+5. AI 按 `references/analysis-plan-compilation.md` 执行 **Compile Analysis Plan**（只读 review）：产出候选 `analysis-plan.candidate.yaml` 并置 `review_status=ready_for_compilation`，不修改正式 plan。所有分析必须完整、自包含并带 closed trace map，并按上一节规则选定 `binding_mode`。
+6. 运行 `scripts/finalize_statistical_review.R --study-dir=<study> --reviewer=<identity>`；R 校验 candidate，成功用原子事务把它提升为正式 `analysis-plan.yaml` 并把 review 置为 `approved`/`published`（零 unresolved issues）；失败则正式 plan 不变、review 回 `pending` 并在第 7 节列出 issues。
+7. 需要生成程序时，仅运行：
    `scripts/approve_and_generate_analysis.R --study-dir=<study> --reviewer=<identity>`。
-   该事务同时签署 review、生成 contract、渲染并校验完整 N 个自包含 `.R` + N 个自包含 `.sas`、生成 collector；任何失败全部回滚到上一套完整产物。
-7. 运行 collector：`Rscript --vanilla <study>/analysis/r/run_all_mmrm.R --mode=run-and-collect`（planned analysis 只登记 code-only 状态，linked 才真正运行 R）。
-8. 统计师在批准的 SAS 环境自行运行 `.sas`，把 run record 放回 `output/analyses/<safe_analysis_id>/`，再运行 `--mode=collect-only` 导入。
-9. 可选：`scripts/generate_case_summary.R` 生成 aggregate-only case summary。
+   它只消费已 `approved` 的 review/plan（不再修改 review 状态或重签统计决定，reviewer 仅作执行/audit actor），生成 contract、渲染并校验完整 N 个自包含 `.R` + N 个自包含 `.sas`、生成 collector；任何失败全部回滚到上一套完整产物。
+8. 运行 collector：`Rscript --vanilla <study>/analysis/r/run_all_mmrm.R --mode=run-and-collect`（planned analysis 只登记 code-only 状态，linked 才真正运行 R）。
+9. 统计师在批准的 SAS 环境自行运行 `.sas`，把 run record 放回 `output/analyses/<safe_analysis_id>/`，再运行 `--mode=collect-only` 导入。
+10. 可选：`scripts/generate_case_summary.R` 生成 aggregate-only case summary。
 
 `generate_standard_study.R` 已退役并 fail-closed；批准后程序发布唯一入口仍是 `approve_and_generate_analysis.R`。
 

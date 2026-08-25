@@ -397,9 +397,11 @@ p5_study_plan <- function(fixture, ids = list(c("MMRM-20", "T14-20"), c("MMRM-03
 }
 
 p5_publish_plan <- function(fixture, plan) {
-  analysis_plan_write(plan, analysis_plan_path(fixture$study_dir))
-  result <- finalize_statistical_review(fixture$study_dir, fixture$review_path, fixture$review_path, allow_unresolved = TRUE)
-  if (!isTRUE(result$published) || !isTRUE(result$ready_for_final_signature)) stop("P5-FIXTURE: finalization failed: ", paste(result$issues$observed, collapse = " | "))
+  analysis_plan_write(plan, analysis_plan_candidate_path(fixture$study_dir))
+  lines <- statistical_review_set_metadata(readLines(fixture$review_path, encoding = "UTF-8", warn = FALSE), "review_status", "ready_for_compilation")
+  writeLines(lines, fixture$review_path, useBytes = TRUE)
+  result <- finalize_statistical_review(fixture$study_dir, fixture$review_path, fixture$review_path, "Synthetic Reviewer", allow_unresolved = TRUE)
+  if (!isTRUE(result$published) || !isTRUE(result$approved)) stop("P5-FIXTURE: finalization failed: ", paste(result$issues$observed, collapse = " | "))
   stopifnot(identical(result$analysis_count, length(plan$analyses)))
   invisible(result)
 }
@@ -470,7 +472,7 @@ p5_transaction_case("coverage 缺一个文件", "PROGRAM-TFL-COVERAGE-FILE-SET",
   }, approve_and_generate_analysis(linked_fixture$study_dir, project_dir, "Synthetic Reviewer")))
 
 # 8.4-5 publication 第 N 个 target 失败（fail_after = N-1，最后一个 target 提交失败）。
-publish_target_count <- 2L + length(analysis_generated_targets(linked_fixture$study_dir, linked_chain$contract))
+publish_target_count <- 1L + length(analysis_generated_targets(linked_fixture$study_dir, linked_chain$contract))
 p5_transaction_case(paste0("publication 第 ", publish_target_count, " 个（最后一个）target 失败"), "Injected target publication failure",
   approve_and_generate_analysis(linked_fixture$study_dir, project_dir, "Synthetic Reviewer", fail_after = publish_target_count - 1L))
 p5_transaction_case("publication 第 1 个 target 失败", "Injected target publication failure",
@@ -508,7 +510,7 @@ reduced_plan <- p5_study_plan(linked_fixture, ids = list(c("MMRM-20", "T14-20"))
 p5_publish_plan(linked_fixture, reduced_plan)
 reapproval_snapshot <- p5_snapshot(linked_fixture$study_dir)
 # 写集全部落盘后第一个删除失败 → 整体回滚到上一套完整产物（含旧 review/contract 与两套程序）。
-write_target_count <- 2L + 3L
+write_target_count <- 1L + 3L
 p5_expect_error(approve_and_generate_analysis(linked_fixture$study_dir, project_dir, "Synthetic Reviewer", fail_after = write_target_count),
                 "Injected target publication failure")
 p5_assert_no_transaction_residue(linked_fixture$study_dir)

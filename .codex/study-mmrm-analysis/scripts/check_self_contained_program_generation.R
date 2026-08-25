@@ -350,9 +350,11 @@ p7_build_study <- function(prefix) {
 }
 
 p7_publish_plan <- function(fixture, plan) {
-  analysis_plan_write(plan, analysis_plan_path(fixture$study_dir))
-  result <- finalize_statistical_review(fixture$study_dir, fixture$review_path, fixture$review_path, allow_unresolved = TRUE)
-  if (!isTRUE(result$published) || !isTRUE(result$ready_for_final_signature)) {
+  analysis_plan_write(plan, analysis_plan_candidate_path(fixture$study_dir))
+  lines <- statistical_review_set_metadata(readLines(fixture$review_path, encoding = "UTF-8", warn = FALSE), "review_status", "ready_for_compilation")
+  writeLines(lines, fixture$review_path, useBytes = TRUE)
+  result <- finalize_statistical_review(fixture$study_dir, fixture$review_path, fixture$review_path, "Synthetic Reviewer", allow_unresolved = TRUE)
+  if (!isTRUE(result$published) || !isTRUE(result$approved)) {
     stop("P7-FIXTURE: finalization failed: ", paste(result$issues$observed, collapse = " | "))
   }
   stopifnot(identical(result$analysis_count, length(plan$analyses)))
@@ -808,9 +810,9 @@ p7_log("D3 \u65ad\u8a00\u901a\u8fc7\uff1a\u78c1\u76d8\u4e0a R \u6216 SAS \u7a0b\
        "\u9010\u8bed\u8a00 conformance \u4e0e coverage \u5747\u4ee5\u7a33\u5b9a\u9519\u8bef\u7801\u62d2\u7ecd\u3002\n")
 
 p7_section("D4. publication \u4e2d\u95f4 target \u6ce8\u5165\u5931\u8d25\uff08\u4e8b\u52a1\u56de\u6eda\uff09")
-d_publish_targets <- 2L + length(analysis_generated_targets(linked_fixture$study_dir, d_chain$contract))
-stopifnot(identical(d_publish_targets, 5L))
-for (fail_after in c(0L, 1L, 2L, 3L, 4L)) {
+d_publish_targets <- 1L + length(analysis_generated_targets(linked_fixture$study_dir, d_chain$contract))
+stopifnot(identical(d_publish_targets, 4L))
+for (fail_after in c(0L, 1L, 2L, 3L)) {
   label <- paste0("D4 publication \u7b2c ", fail_after + 1L, " / ", d_publish_targets, " \u4e2a target \u5931\u8d25")
   p7_expect_error(approve_and_generate_analysis(linked_fixture$study_dir, project_dir, "Synthetic Reviewer", fail_after = fail_after),
                   "Injected target publication failure")
@@ -942,7 +944,7 @@ reduced_plan <- p7_plan(mixed_fixture$study_id, list(mixed_planned))
 p7_publish_plan(mixed_fixture, reduced_plan)
 reduced_snapshot <- p7_snapshot(mixed_fixture$study_dir)
 # 写集全部落盘后第一个删除失败 → 整体回滚到上一套完整产物。
-p7_expect_error(approve_and_generate_analysis(mixed_fixture$study_dir, project_dir, "Synthetic Reviewer", fail_after = 2L + 3L),
+p7_expect_error(approve_and_generate_analysis(mixed_fixture$study_dir, project_dir, "Synthetic Reviewer", fail_after = 1L + 3L),
                 "Injected target publication failure")
 p7_assert_no_transaction_residue(mixed_fixture$study_dir)
 p7_assert_snapshot(mixed_fixture$study_dir, reduced_snapshot, "E obsolete deletion \u5931\u8d25\u56de\u6eda")

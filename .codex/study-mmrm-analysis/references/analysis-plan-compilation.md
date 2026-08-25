@@ -2,27 +2,31 @@
 
 ## 目的
 
-把当前 study 已登记的证据和统计师决定编译成 `statistician-review/analysis-plan.yaml`。这是显式的 AI-agent 工作流步骤。R 只校验结果，永远不把自由文本评论当作可执行统计值。
+把统计师已在 `statistician-review/statistical-review.md` 中确认的决定编译成候选 analysis plan `statistician-review/analysis-plan.candidate.yaml`，并把 working review 的 `review_status` 置为 `ready_for_compilation`。这是显式的 AI-agent 工作流步骤，**只读当前 review**。随后由 R finalization 校验 candidate，并用原子事务把它提升为正式 `analysis-plan.yaml` 且把 review 置为 `approved`/`published`。R 只校验结果，永远不把自由文本评论当作可执行统计值。
 
-## 允许的输入
+## 唯一允许的输入：当前 review
 
-只能使用：
+Compile 阶段**只能读取当前 `statistician-review/statistical-review.md`**。AI Candidate Generation 已把真实变量、类型、PARAMCD、treatment levels、specification 定义等证据写进候选表，统计师已在其中确认决定；Compile 不再重新读取原始证据。
 
-1. `backup-trace/input-manifest.csv` 中已登记的当前 study 证据；
-2. pending 的 `statistician-review/statistical-review.md`；
-3. 含 `null` 的 `statistician-review/analysis-plan.yaml` 模板。
+**不得**读取任何其它来源来补缺失决定：ADaM 数据、`backup-trace/intake-mmrm-profile.yaml`、`input-manifest.csv`、ADaM specification、SAP、shell、旧 `analysis-plan.yaml`、null plan 模板、`endpoint-mapping.yaml`、旧 `analysis-specification.md` 或任何 legacy specification、历史生成程序、其他 study、profile defaults。缺的就是缺，保持 `null` 并形成 issue，不允许猜。
 
-**不得**读取以下任何来源作为缺失决定的依据：`endpoint-mapping.yaml`、旧 `analysis-specification.md` 或任何 legacy specification、历史生成程序（旧 R wrapper、旧 `<analysis_id>_template.sas`）、其他 study、profile defaults、任何 Markdown 自由文本。
+## 决定优先级
+
+对每个 (TFL, 规则类别) 单元，按以下优先级解释统计师意见：
+
+1. **明确修订**：统计师写出的明确取值/规则，覆盖 AI 候选。
+2. **采用**：统计师认可 AI 候选。只有该候选唯一、完整、可执行（含全部所需 typed 字段）时才能采用；若候选为“未识别/当前不可执行/多候选未选择”或缺 typed 字段，则该单元保持 unresolved，不得编译出值。
+3. **同上表**：向前查找最近一个已解析 TFL 的同一规则类别并继承其决定；继承后在当前 analysis 内**展开为完整取值**，不保留引用。没有可继承的前序同类别决定时保持 unresolved。
 
 ## 输出契约
 
-唯一正式输出是一份完整替换的候选 `analysis-plan.yaml`，schema 版本为 **`2.1`**。不要修改 review status、reviewer、approval time、signature 或 hash 字段。
+唯一输出是完整的候选 `statistician-review/analysis-plan.candidate.yaml`，schema 版本 **`2.1`**。**不修改正式 `analysis-plan.yaml`**，也不写 review 的 reviewer / approval time / signature / hash 字段（这些由 R finalization 写）。编译并通过跨行逻辑检查后，把 working review 的 `review_status` 置为 `ready_for_compilation`。
 
 对每个字段：
 
 - 把显式的 source fact 或统计师决定复制到匹配的 typed 字段；
 - 保持 fixed effects、covariance fallback、treatment levels、derivations、groups、outputs 的声明顺序；
-- 把稳定的 `SRC-*` 与 `DEC-*` ID 映射进 closed 的 `trace` map；
+- 把 `SRC-*`（源证据 ID）与派生的决定 ID（`<TFL ID>/<规则类别>`）映射进 closed 的 `trace` map；
 - 未决定的必填值保留 YAML `null`；
 - 明确为空的集合保留 `[]`；
 - **绝不为了让校验通过而插入 profile default 或猜测值。**
@@ -98,9 +102,9 @@ treatment：适用时的 reference / comparator / contrast_direction / confidenc
 
 当某个 planned analysis 的 ADaM 数据到达时，**三步都要做，不能跳**：
 
-1. 重新编译 analysis plan：把 `dataset.binding_mode` 改为 `linked`，填入真实 `relative_path` 与真实 `sha256`，并把 `execution_context` 改为对应的 available 组合。
-2. 重新 finalize：`scripts/finalize_statistical_review.R --study-dir=<study>`，必须再次达到 `ready_for_final_signature: true` 且零 unresolved issue。
-3. 重新批准并生成：`scripts/approve_and_generate_analysis.R --study-dir=<study> --reviewer=<identity>`。
+1. 重新 Compile：把 `dataset.binding_mode` 改为 `linked`，填入真实 `relative_path` 与真实 `sha256`，并把 `execution_context` 改为对应的 available 组合，产出新的 `analysis-plan.candidate.yaml` 并置 `review_status=ready_for_compilation`。
+2. 重新 finalize：`scripts/finalize_statistical_review.R --study-dir=<study> --reviewer=<identity>`，校验 candidate 后原子发布正式 `analysis-plan.yaml`，review 置 `approved`/`published`，零 unresolved issue。
+3. 重新生成：`scripts/approve_and_generate_analysis.R --study-dir=<study> --reviewer=<identity>`，从 approved plan 生成 contract 与自包含程序。
 
 **只把生成程序里的 `DATA_AVAILABLE` 从 FALSE/NO 改成 TRUE/YES 是无效且被禁止的。** planned 程序永久带 `CODE_GENERATION_ONLY` gate，改那个值不会获得执行许可。
 
@@ -119,9 +123,21 @@ treatment：适用时的 reference / comparator / contrast_direction / confidenc
 
 不要在 plan 里手写输出文件名。contract 编译时由 compiler 从安全化 TFL identity 机械生成八个互不重叠的字段：`r_raw_file`、`r_final_file`、`r_diagnostic_file`、`r_run_record_file`、`sas_raw_file`、`sas_final_file`、`sas_diagnostic_file`、`sas_run_record_file`。IR 与 renderer 只能逐字复制。
 
+## 跨行逻辑检查与失败处理
+
+编译前 AI 必须做跨行一致性检查：dataset / mappings / endpoint / treatment / model / estimands 相互一致，且第 7 节没有 unresolved issue。任一不一致或有 unresolved issue 时：**不产出可发布 candidate**，把问题写进第 7 节，保持/恢复 `review_status: pending`，由统计师处置后重新 Compile。只有全部通过才写 `analysis-plan.candidate.yaml` 并置 `ready_for_compilation`。
+
+reviewer identity 由触发 Compile 的统计师提供，一路传给 finalization（`--reviewer=<identity>`）；统计师不手动编辑 review 状态字段。
+
 ## 必须运行的校验
 
-编译完成后立即运行（按本机 Start Menu shortcut 解析 Rscript，不要假定安装目录）：
+Compile 产出 candidate 后，由 R finalization 校验并发布（按本机 Start Menu shortcut 解析 Rscript，不要假定安装目录）：
+
+```powershell
+& $rscript --vanilla ".codex/study-mmrm-analysis/scripts/finalize_statistical_review.R" "--study-dir=<study>" "--reviewer=<identity>"
+```
+
+开发期的 focused 自检（synthetic fixture，不依赖任何真实 study）：
 
 ```powershell
 $shortcut = Get-ChildItem "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\R" -Filter "*.lnk" -Recurse | Select-Object -First 1

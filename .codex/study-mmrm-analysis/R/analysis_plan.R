@@ -1,4 +1,6 @@
 analysis_plan_path <- function(study_dir) file.path(study_dir, "statistician-review", "analysis-plan.yaml")
+# AI Compile 产出的候选 plan（只读 review 编译得到）；R finalization 校验后原子提升为正式 analysis-plan.yaml。
+analysis_plan_candidate_path <- function(study_dir) file.path(study_dir, "statistician-review", "analysis-plan.candidate.yaml")
 analysis_plan_trace_keys <- function() c("dataset", "adapter", "mappings", "derivations", "filters", "groups", "endpoint_definitions", "fixed_effects", "reml", "covariance", "df_method", "estimands", "treatment")
 
 analysis_plan_validate_execution_context <- function(context) standard_validate_execution_context(context, "analysis_plan.execution_context")
@@ -8,7 +10,7 @@ analysis_plan_validate_trace <- function(analysis, valid_trace_ids = NULL, conte
   nonempty <- c(dataset = TRUE, adapter = !is.null(analysis$adapter), mappings = TRUE, derivations = length(analysis$derivations) > 0L, filters = length(analysis$filters) > 0L, groups = length(analysis$groups) > 0L, endpoint_definitions = length(analysis$endpoint_definitions) > 0L, fixed_effects = length(analysis$fixed_effects) > 0L, reml = TRUE, covariance = TRUE, df_method = TRUE, estimands = TRUE, treatment = !is.null(analysis$treatment))
   for (name in names(trace)) {
     refs <- if (!length(trace[[name]])) character() else unlist(trace[[name]], use.names = FALSE)
-    if (!is.character(refs) || !is.null(names(trace[[name]])) || anyNA(refs) || any(!grepl("^[A-Za-z][A-Za-z0-9_./-]*$", refs)) || anyDuplicated(refs)) stop("PLAN-TRACE-MALFORMED: ", context, ".trace.", name, " must be a unique stable-ID sequence.")
+    if (!is.character(refs) || !is.null(names(trace[[name]])) || anyNA(refs) || any(!nzchar(trimws(refs))) || anyDuplicated(refs)) stop("PLAN-TRACE-MALFORMED: ", context, ".trace.", name, " must be a unique stable-ID sequence.")
     if (nonempty[[name]] && !length(refs)) stop("PLAN-TRACE-MISSING: ", context, ".trace.", name, " requires at least one reference.")
     if (!nonempty[[name]] && length(refs)) stop("PLAN-TRACE-ORPHAN: ", context, ".trace.", name, " must be empty when its field is empty/absent.")
     if (!is.null(valid_trace_ids) && any(!refs %in% valid_trace_ids)) stop("PLAN-TRACE-UNRESOLVED: ", context, ".trace.", name, " references unknown IDs: ", paste(setdiff(refs, valid_trace_ids), collapse = ", "))

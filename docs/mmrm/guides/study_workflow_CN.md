@@ -41,14 +41,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .codex/study-mmrm-analysis/s
 
 1. 把 source materials 放入 `input/`，或填写初始化生成的 `input/statistician-analysis-input.md`。
 2. 生成或更新 `backup-trace/input-manifest.csv`，记录路径、大小、修改时间和 SHA-256。
-3. AI 只从 source materials 中提取候选统计规则，不补写 SAP / shell / ADaM spec 没有定义的规则。
-4. 生成 `statistician-review/statistical-review.md`，用中文列出 study 范围、analysis/TFL、模型规则、adapter / 行分配和未解决问题。
-5. 统计师在同一 Markdown 文件中确认或修改规则；所有 issue 必须 resolved。
-6. AI 按 `references/analysis-plan-compilation.md` 编译 `statistician-review/analysis-plan.yaml`（schema `2.1`）。它是唯一机器可读统计来源；Markdown 永远不被解析为 runtime 模型参数。
-7. 运行 `scripts/finalize_statistical_review.R --study-dir=<study>`，必须达到 `ready_for_final_signature: true` 且零 unresolved issue。
-8. 统计师授权后只运行一条命令：
+3. deterministic R intake 发现 MMRM TFL，生成 `statistician-review/statistical-review.md` 骨架（八 section + 每 TFL 一张五列十类规则候选表），并生成全量 ADaM profile `backup-trace/intake-mmrm-profile.yaml`（变量、类型、真实水平、PARAMCD/PARAM、treatment levels 与 specification 变量级对齐）。
+4. AI Candidate Generation：读取全部 registered input、`intake-mmrm-profile.yaml` 与 ADaM specification，为每个 TFL 的十类规则填写唯一、带证据的候选，写回同一个 `statistical-review.md`；无法唯一确定的项写“未识别/当前不可执行”并建 issue。
+5. 统计师只在同一 Markdown 中填写“统计师审阅意见”和 issue resolution；所有 issue 必须 resolved。
+6. AI 按 `references/analysis-plan-compilation.md` 执行 **Compile Analysis Plan**（只读 review）：产出候选 `statistician-review/analysis-plan.candidate.yaml`（schema `2.1`）并置 `review_status=ready_for_compilation`，不修改正式 plan。Markdown 永远不被解析为 runtime 模型参数。
+7. 运行 `scripts/finalize_statistical_review.R --study-dir=<study> --reviewer=<identity>`：R 校验 candidate，成功用原子事务把它提升为正式 `analysis-plan.yaml` 并把 review 置为 `approved`/`published`（零 unresolved issue）；失败则正式 plan 不变、review 回 `pending`。
+8. 需要生成程序时只运行一条命令：
    `scripts/approve_and_generate_analysis.R --study-dir=<study> --reviewer=<identity>`。
-   该事务签署 review、编译 contract、逐 analysis 渲染并静态校验完整 N 个 `.R` + N 个 `.sas`、生成 collector，一次性提交；任一失败全部回滚到上一套完整产物。
+   它只消费已 `approved` 的 review/plan（不改状态、不重签），编译 contract、逐 analysis 渲染并静态校验完整 N 个 `.R` + N 个 `.sas`、生成 collector，一次性提交；任一失败全部回滚到上一套完整产物。
 9. 运行 collector 收集 R 结果：
    `Rscript --vanilla studies/<study_id>/analysis/r/run_all_mmrm.R --mode=run-and-collect`。
    MMRM 拟合由生成程序内联调用 R package `mmrm`；其他 package 只用于数据处理、摘要、制表或绘图。
@@ -151,8 +151,8 @@ SAS 程序（三项）：
 
 **只把 `DATA_AVAILABLE` 改成 TRUE/YES 是无效且被禁止的做法。** 必须按顺序做完三步：
 
-1. 重新编译 `analysis-plan.yaml`：`binding_mode` 改为 `linked`，填真实 `relative_path` 与真实 `sha256`，`execution_context` 改为对应 available 组合；
-2. 重新运行 `finalize_statistical_review.R`，再次达到 `ready_for_final_signature: true` 且零 issue；
+1. 重新 Compile：`binding_mode` 改为 `linked`，填真实 `relative_path` 与真实 `sha256`，`execution_context` 改为对应 available 组合，产出新的 `analysis-plan.candidate.yaml` 并置 `review_status=ready_for_compilation`；
+2. 重新运行 `finalize_statistical_review.R --study-dir=<study> --reviewer=<identity>`，校验 candidate 后发布正式 `analysis-plan.yaml`，review 置 `approved`/`published`，零 issue；
 3. 重新运行 `approve_and_generate_analysis.R`，事务发布 linked 版本的整套程序。
 
 ## 6. R 与 SAS 输出完全分开

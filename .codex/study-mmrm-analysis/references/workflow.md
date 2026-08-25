@@ -119,9 +119,9 @@ dataset:
 
 正确顺序（三步都必须做，不能跳）：
 
-1. 重新编译 analysis plan：把该 analysis 的 `dataset.binding_mode` 改为 `linked`，填入真实 `relative_path` 与真实 `sha256`，并把 `execution_context` 改为 `data_availability: available` 等对应值。按 `references/analysis-plan-compilation.md` 执行。
-2. 重新 finalize：`scripts/finalize_statistical_review.R --study-dir=<study>`，必须再次达到 `ready_for_final_signature: true` 且零 unresolved issue。
-3. 重新批准并生成：`scripts/approve_and_generate_analysis.R --study-dir=<study> --reviewer=<identity>`。这会重新渲染并事务发布整套 linked 版本程序。
+1. 重新 Compile：把该 analysis 的 `dataset.binding_mode` 改为 `linked`，填入真实 `relative_path` 与真实 `sha256`，并把 `execution_context` 改为 `data_availability: available` 等对应值，产出新的 `analysis-plan.candidate.yaml` 并置 `review_status=ready_for_compilation`。按 `references/analysis-plan-compilation.md` 执行。
+2. 重新 finalize：`scripts/finalize_statistical_review.R --study-dir=<study> --reviewer=<identity>`，校验 candidate 后发布正式 `analysis-plan.yaml`，review 置 `approved`/`published`，零 unresolved issue。
+3. 重新生成：`scripts/approve_and_generate_analysis.R --study-dir=<study> --reviewer=<identity>`。这会重新渲染并事务发布整套 linked 版本程序。
 
 ## 5. 统计师允许修改的范围
 
@@ -259,16 +259,17 @@ failed
 ## 12. 标准操作步骤
 
 1. `scripts/init_study.ps1 -StudyDir studies/<study_id>` 初始化目录。
-2. 把当前 study 的 source 放入 `input/`，运行 `scripts/generate_intake_review.R --study-dir=<study>`，生成 pending review 和含 `null` 的 plan 模板。
-3. 统计师只在 `statistician-review/statistical-review.md` 中填写 comments 和 issue resolutions。
-4. AI 按 `references/analysis-plan-compilation.md` 执行 **Compile Analysis Plan**，只替换 `statistician-review/analysis-plan.yaml`。每个 analysis 必须完整、自包含、带 closed trace map，并按第 2 节规则选定 `binding_mode`。
-5. `scripts/finalize_statistical_review.R --study-dir=<study>`，读取 finalization result，必须 `ready_for_final_signature: true` 且零 unresolved issue。
-6. 统计师授权后只运行一条命令：
+2. 把当前 study 的 source 放入 `input/`，运行 `scripts/generate_intake_review.R --study-dir=<study>`。确定性 R intake 发现 TFL，生成 pending review 骨架（八 section + 每 TFL 一张五列十类规则候选表，候选/证据单元格留待 AI 填写）与全量 ADaM profile `backup-trace/intake-mmrm-profile.yaml`（变量、类型、真实水平、PARAMCD/PARAM、treatment levels 与 specification 变量级对齐）。含 `null` 的 `analysis-plan.yaml` 仅是占位模板，在 Compile 前不是正式决策来源，统计师不编辑它。
+3. **AI Candidate Generation**：AI 读取全部 registered input、`backup-trace/intake-mmrm-profile.yaml`、SAP、shell 和 ADaM specification，为每个 TFL 的十类规则填写唯一、带证据的候选与识别状态，写回同一个 `statistician-review/statistical-review.md`。必须使用 profile/spec 的真实变量、类型、PARAMCD、treatment levels 与 specification 定义；无法唯一确定的项写“未识别/当前不可执行”并在第 7 节建 issue，不得只罗列所有可能 dataset 或 PARAMCD。AI 不写 YAML、不签名、不从 defaults 填补。
+4. 统计师只在 `statistician-review/statistical-review.md` 中填写“统计师审阅意见”和 issue resolutions。
+5. AI 按 `references/analysis-plan-compilation.md` 执行 **Compile Analysis Plan**（只读 review）：产出候选 `statistician-review/analysis-plan.candidate.yaml` 并置 `review_status=ready_for_compilation`，不改正式 plan。每个 analysis 必须完整、自包含、带 closed trace map，并按第 2 节规则选定 `binding_mode`。
+6. `scripts/finalize_statistical_review.R --study-dir=<study> --reviewer=<identity>`：R 校验 candidate，成功用原子事务提升为正式 `analysis-plan.yaml` 并把 review 置 `approved`/`published`（零 unresolved issue）；失败则正式 plan 不变、review 回 `pending`。
+7. 需要生成程序时只运行一条命令：
    `scripts/approve_and_generate_analysis.R --study-dir=<study> --reviewer=<identity>`。
-   该事务同时签署 review、生成 contract、渲染并校验完整 N 个 `.R` + N 个 `.sas`、生成 collector，一次性提交。
-7. `--mode=run-and-collect` 运行 collector（linked 才会真正跑 R）。
-8. 统计师在批准的 SAS 环境运行 `.sas`，把 run record 放回对应 output 目录，再用 `--mode=collect-only` 导入。
-9. 可选：`scripts/generate_case_summary.R` 生成 aggregate-only case summary。
+   它只消费已 `approved` 的 review/plan（不改状态、不重签），生成 contract、渲染并校验完整 N 个 `.R` + N 个 `.sas`、生成 collector，一次性提交。
+8. `--mode=run-and-collect` 运行 collector（linked 才会真正跑 R）。
+9. 统计师在批准的 SAS 环境运行 `.sas`，把 run record 放回对应 output 目录，再用 `--mode=collect-only` 导入。
+10. 可选：`scripts/generate_case_summary.R` 生成 aggregate-only case summary。
 
 `generate_standard_study.R` 已退役并 fail-closed。批准后程序发布的唯一入口是 `approve_and_generate_analysis.R`。
 

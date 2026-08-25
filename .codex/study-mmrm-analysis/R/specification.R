@@ -17,7 +17,8 @@ parse_statistical_review_table <- function(section_lines, expected_columns, sect
 }
 
 statistical_review_required_headings <- function() c("## 1. 审阅结论与签核", "## 2. Study 与数据范围", "## 3. Analysis 与 TFL 清单", "## 4. Analysis Plan（只读）", "## 5. 模型、协方差与估计量确认", "## 6. Adapter / 派生 / 行分配确认", "## 7. 未解决问题与决议", "## 8. Approval Payload 指纹")
-statistical_review_candidate_table_columns <- function() c("规则类别", "AI 识别的候选规则", "证据来源与识别状态", "Standard MMRM Profile v1 评估", "统计师审阅意见", "decision_id")
+statistical_review_candidate_table_columns <- function() c("规则类别", "AI 识别的候选规则", "证据来源与识别状态", "Standard MMRM Profile v1 评估", "统计师审阅意见")
+statistical_review_trace_id <- function(tfl_id, category) paste0(trimws(as.character(tfl_id)), "/", trimws(as.character(category)))
 statistical_review_candidate_rule_categories <- function() c("分析数据集", "分析人群", "终点变量与取值", "终点维度", "响应与基线", "访视与窗口", "重复记录与行分配", "固定效应", "协方差与自由度", "估计量与输出")
 statistical_review_iso_utc <- function(value) grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", trimws(as.character(value)))
 
@@ -43,14 +44,16 @@ parse_statistical_review_candidate_tables <- function(review) {
       table = parse_statistical_review_table(lines[(start + 1L):end], statistical_review_candidate_table_columns(), paste0("candidate ", matches[[start]][[2]]))
     )
   })
-  ids <- unlist(lapply(result, function(x) as.character(x$table$decision_id)), use.names = FALSE)
-  if (any(!grepl("^DEC-[A-Za-z0-9_-]+$", ids)) || anyDuplicated(ids)) stop("Review decision IDs must be unique DEC-* stable IDs.")
+  tfl_ids <- vapply(result, function(x) as.character(x$tfl_id), character(1))
+  if (anyDuplicated(tfl_ids)) stop("Review TFL IDs must be unique across candidate tables.")
+  categories <- statistical_review_candidate_rule_categories()
+  for (x in result) if (!identical(as.character(x$table[["规则类别"]]), categories)) stop("candidate ", x$tfl_id, " must list the ten canonical rule categories exactly once in order.")
   result
 }
 statistical_review_issues <- function(review) parse_statistical_review_table(statistical_review_section_lines(review, "## 7. 未解决问题与决议"), c("issue_id", "scope", "question_or_risk", "resolution", "status"), "Issues")
 statistical_review_trace_ids <- function(review, source_ids = character()) {
-  decision_ids <- unlist(lapply(parse_statistical_review_candidate_tables(review), function(x) as.character(x$table$decision_id)), use.names = FALSE)
-  unique(c(source_ids, decision_ids))
+  derived <- unlist(lapply(parse_statistical_review_candidate_tables(review), function(x) statistical_review_trace_id(x$tfl_id, x$table[["规则类别"]])), use.names = FALSE)
+  unique(c(source_ids, derived))
 }
 
 review_execution_content <- function(review) {

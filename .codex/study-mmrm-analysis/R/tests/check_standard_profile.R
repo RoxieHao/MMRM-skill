@@ -271,9 +271,11 @@ plan <- list(
                            sas_execution_profile = "sas-9.4m5-self-contained/v1"),
   analyses = lapply(mixed_ids, function(item) p6_plan_analysis(item[[1L]], item[[2L]], item[[3L]], fixture$source_path, project_dir, fixture$evidence_id))
 )
-analysis_plan_write(plan, analysis_plan_path(fixture$study_dir))
-finalization <- finalize_statistical_review(fixture$study_dir, fixture$review_path, fixture$review_path, allow_unresolved = TRUE)
-stopifnot(isTRUE(finalization$published), isTRUE(finalization$ready_for_final_signature), identical(finalization$analysis_count, 3L))
+analysis_plan_write(plan, analysis_plan_candidate_path(fixture$study_dir))
+profile_review_lines <- statistical_review_set_metadata(readLines(fixture$review_path, encoding = "UTF-8", warn = FALSE), "review_status", "ready_for_compilation")
+writeLines(profile_review_lines, fixture$review_path, useBytes = TRUE)
+finalization <- finalize_statistical_review(fixture$study_dir, fixture$review_path, fixture$review_path, "Synthetic Reviewer", allow_unresolved = TRUE)
+stopifnot(isTRUE(finalization$published), isTRUE(finalization$approved), identical(finalization$analysis_count, 3L))
 chain <- approve_and_generate_analysis(fixture$study_dir, project_dir, "Synthetic Reviewer")
 contract <- chain$contract
 contract_order <- vapply(contract$analyses, function(x) as.character(x$analysis_id), character(1))
