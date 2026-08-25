@@ -9,12 +9,14 @@ review_finalize_project_dir <- function(study_dir) { current <- normalizePath(st
 # by a prior blocked finalization) are excluded here because they are regenerated from live
 # validation each run; otherwise a fixed study could never re-finalize.
 review_finalize_existing_issues <- function(review) { issues <- statistical_review_issues(review); issues[trimws(as.character(issues$status)) != "resolved" & !grepl("^PLAN-", trimws(as.character(issues$issue_id))), , drop = FALSE] }
-# Render a Section 7 issue table that preserves every existing reviewer row verbatim (including
-# resolutions and resolved statuses) and appends the machine-generated validation blockers that
-# are not already present. Only aggregate issue metadata is emitted; no legacy trap content.
+# Render a Section 7 issue table for a blocked finalization. Stale machine PLAN-* rows from a prior
+# blocked run are dropped so Section 7 reflects only this run's live validation; any genuine
+# non-PLAN reviewer row is preserved verbatim. Current-round PLAN-* blockers are then appended.
+# Only aggregate issue metadata is emitted; no legacy trap content.
 review_finalize_render_blocked_section <- function(existing, generated) {
   header <- c("| issue_id | scope | question_or_risk | resolution | status |", "|---|---|---|---|---|")
   rows <- character(); existing_ids <- character()
+  if (!is.null(existing) && nrow(existing)) existing <- existing[!grepl("^PLAN-", trimws(as.character(existing$issue_id))), , drop = FALSE]
   if (!is.null(existing) && nrow(existing)) {
     existing_ids <- as.character(existing$issue_id)
     rows <- c(rows, vapply(seq_len(nrow(existing)), function(i) paste0("| ", markdown_table_escape(existing$issue_id[[i]]), " | ", markdown_table_escape(existing$scope[[i]]), " | ", markdown_table_escape(existing$question_or_risk[[i]]), " | ", markdown_table_escape(existing$resolution[[i]]), " | ", markdown_table_escape(existing$status[[i]]), " |"), character(1)))

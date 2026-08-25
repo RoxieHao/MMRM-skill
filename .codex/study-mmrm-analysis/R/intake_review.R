@@ -282,10 +282,10 @@ intake_render_candidate_block <- function(tfl) {
 intake_render_review <- function(study_dir, project_dir, route, discovery) {
   study_id <- basename(normalizePath(study_dir, winslash = "/", mustWork = TRUE)); manifest_relative <- project_relative_path(discovery$manifest$path, project_dir)
   candidate_blocks <- if (length(discovery$tfls)) unlist(lapply(discovery$tfls, intake_render_candidate_block), use.names = FALSE) else c("No explicit MMRM TFL was found in registered input.", "")
-  issues <- c("| issue_id | scope | question_or_risk | resolution | status |", "|---|---|---|---|---|", "| INTAKE-001 | ALL | Required analysis-plan decisions remain unresolved. | Statistician records decisions; AI compiles analysis-plan.yaml. | unresolved |")
+  issues <- c("| issue_id | scope | question_or_risk | resolution | status |", "|---|---|---|---|---|")
   c("---", "review_schema_version: '2.0'", paste0("study_id: '", study_id, "'"), paste0("generation_route: '", route, "'"), "review_status: 'pending'", "reviewed_by: ''", "reviewed_at_utc: ''", "finalization_status: 'pending'", paste0("source_manifest_file: '", manifest_relative, "'"), "analysis_plan_file: ''", "analysis_plan_sha256: ''", "source_evidence_sha256: ''", "review_execution_content_sha256: ''", "approval_payload_sha256: ''", "---", "",
-    "# 统计师 MMRM 审阅", "", "> 统计师只编辑本 Markdown 的审阅意见和 issue resolution。analysis-plan.yaml 由显式 Compile Analysis Plan agent step 生成；R 不从自由文本推断执行参数。", "",
-    "## 1. 审阅结论与签核", "当前为 pending；签核字段由 approve_and_generate_analysis.R 在通过全部 gate 后写入。", "",
+    "# 统计师 MMRM 审阅", "", "> 统计师只编辑第 3 节的“统计师审阅意见”单元格。第 7 节未解决问题由 AI 每轮从第 3 节完全重建，统计师不手动编辑 issue。analysis-plan.yaml 由显式 Compile Analysis Plan agent step 生成；R 不从自由文本推断执行参数。", "",
+    "## 1. 审阅结论与签核", "当前为 pending；签核字段由 finalize_statistical_review.R 在通过全部 gate 后写入；approve_and_generate_analysis.R 只消费已批准结果。", "",
     "## 2. Study 与数据范围", paste0("Study：", study_id, "。Registered evidence：manifest ", manifest_relative, "；全量 ADaM profile backup-trace/intake-mmrm-profile.yaml（变量、类型、真实水平、PARAMCD/PARAM、treatment levels 与 specification 对齐）。"), "",
     "## 3. Analysis 与 TFL 清单", "候选与证据单元格由显式 AI Candidate Generation step 依据 registered input 与 profile/specification 填写；trace ID 由 <TFL ID>/<规则类别> 自动派生。统计师只编辑“统计师审阅意见”单元格，并须保持在同一 Markdown 物理行；需要换行时使用 <br>。不得在候选 TFL 标题下新增或粘贴其他 Markdown 表格；歧义必须保留并形成 issue。", "", candidate_blocks,
     "## 4. Analysis Plan（只读）", "<!-- ANALYSIS_PLAN_BEGIN -->", "Pending: compile and validate analysis-plan.yaml.", "<!-- ANALYSIS_PLAN_END -->", "",
