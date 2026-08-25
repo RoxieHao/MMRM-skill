@@ -12,7 +12,7 @@ statistician-review/statistical-review.md        人工审阅与签名界面（A
                 ↓ Compile Analysis Plan（只读 review）
 statistician-review/analysis-plan.candidate.yaml 候选 plan（待 R 校验）
                 ↓ finalize（R 校验 candidate 后原子发布，review 置 approved/published）
-statistician-review/analysis-plan.yaml           正式机器可执行统计语义（schema 2.1）
+statistician-review/analysis-plan.yaml           正式机器可执行统计语义（schema 2.2）
                 ↓ approve_and_generate（只消费 approved）
 statistician-review/standard-mmrm-contract.yaml  机械编译的 runtime contract
                 ↓ 逐 analysis/TFL 确定性渲染
@@ -50,6 +50,8 @@ output/analyses/<safe_analysis_id>/ + output/tfl-output-manifest.csv
 
 - **唯一事实来源：** 统计师只编辑第 3 节每个 (TFL, 规则类别) 单元的“统计师审阅意见”。第 7 节未解决问题由 AI 每轮从第 3 节完全重建，统计师不手动编辑 issue，不手写 resolution/status。
 - **issue 派生：** 仍不可唯一执行的单元各生成一条稳定 ID `REVIEW/<TFL ID>/<规则类别>`；可执行单元不产生 issue；全部可执行时第 7 节为空表。第 7 节是当前快照，不保留历史行。
+- **“采用”即最终范围：** “采用”只取候选中能直接成为最终规则的内容；候选里未被统计师明确保留的附加限制/维度/窗口/筛选视为不适用，不产生 issue。只有明确需求无法由 schema/renderer 表达、必需决策无来源、或采用的数据集无法在 manifest 中唯一解析时才建 issue。
+- **模型固定效应（schema 2.2）：** 用结构化 `model_terms` 表达，核心项用 `role`（visit/baseline/treatment），额外协变量用 `variable`+`variable_type`（categorical/numeric），交互用 `of` 引用已声明成员；不允许自由文本公式，不含 study 默认变量。dataset binding 从既有 manifest 解析，review 不手写 path/SHA。详见 `references/analysis-plan-compilation.md`。
 - **复检循环（用户说“已审阅/继续/复检”等时触发，纯 agent step，只读 review + 现有 R 校验）：**
   1. 读当前 `statistician-review/statistical-review.md`。
   2. 按优先级解释每个单元：明确修订 > 采用（候选唯一、完整、含全部 typed 字段）> 同上表（向前继承并展开为完整取值）。

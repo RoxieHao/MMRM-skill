@@ -20,12 +20,12 @@ Compile 阶段**只能读取当前 `statistician-review/statistical-review.md`**
 
 ## 输出契约
 
-唯一输出是完整的候选 `statistician-review/analysis-plan.candidate.yaml`，schema 版本 **`2.1`**。**不修改正式 `analysis-plan.yaml`**，也不写 review 的 reviewer / approval time / signature / hash 字段（这些由 R finalization 写）。编译并通过跨行逻辑检查后，把 working review 的 `review_status` 置为 `ready_for_compilation`、`finalization_status` 置为 `pending`，并清空陈旧 approval hashes（详见“每轮复检、issue 重建与失败处理”）。
+唯一输出是完整的候选 `statistician-review/analysis-plan.candidate.yaml`，schema 版本 **`2.2`**。旧的 `2.1`（`fixed_effects` 词表）不再兼容，必须重新 Compile 为 `2.2`（`model_terms`）并重新 finalize。**不修改正式 `analysis-plan.yaml`**，也不写 review 的 reviewer / approval time / signature / hash 字段（这些由 R finalization 写）。编译并通过跨行逻辑检查后，把 working review 的 `review_status` 置为 `ready_for_compilation`、`finalization_status` 置为 `pending`，并清空陈旧 approval hashes（详见“每轮复检、issue 重建与失败处理”）。
 
 对每个字段：
 
 - 把显式的 source fact 或统计师决定复制到匹配的 typed 字段；
-- 保持 fixed effects、covariance fallback、treatment levels、derivations、groups、outputs 的声明顺序；
+- 保持 model_terms、covariance fallback、treatment levels、derivations、groups、outputs 的声明顺序；
 - 把 `SRC-*`（源证据 ID）与派生的决定 ID（`<TFL ID>/<规则类别>`）映射进 closed 的 `trace` map；
 - 未决定的必填值保留 YAML `null`；
 - 明确为空的集合保留 `[]`；
@@ -45,6 +45,42 @@ execution_context:
 ```
 
 `sas_execution_profile` 是**批准的目标 SAS 执行环境**，不由 renderer 探测或填默认值。当前唯一允许值 `sas-9.4m5-self-contained/v1`，其能力要求为：最低 SAS 9.4M5、会话编码 UTF-8、`fcmp` / `bit_operations` / `sha256` 能力均为 true、CSV writer 为 UTF-8 BOM data-step writer。该 profile 也声明本流水线**不执行 SAS**。
+
+## model_terms：结构化固定效应（schema 2.2）
+
+模型固定效应用结构化、按声明顺序的 `model_terms` 表达，不允许自由文本公式。核心 MMRM 项用**角色 token**（保留已验证/SHA-pinned/golden 的核心渲染），统计师明确声明的额外协变量用**真实变量**表达：
+
+```yaml
+model_terms:
+  - kind: main_effect
+    role: visit
+  - kind: main_effect
+    role: baseline
+  - kind: interaction
+    of: [baseline, visit]
+  - kind: main_effect
+    variable: <数据集中存在的变量>
+    variable_type: categorical | numeric
+  - kind: interaction
+    of: [<角色或已声明变量>, <角色或已声明变量>]
+```
+
+规则：
+- 核心项用 `role ∈ {visit, baseline, treatment}`；treatment 角色仅当存在 treatment mapping/block 时允许。
+- 额外协变量用 `variable`（必须存在于该 analysis 所选 dataset 的 profile）+ `variable_type ∈ {categorical, numeric}`。
+- `interaction.of` 只能引用已声明为 main effect 的角色或变量（≥2 个），成员集合去重、顺序不影响同一性；不允许自由文本/转换/嵌套表达式。
+- 必要结构：必须含 visit、baseline、baseline×visit；有 treatment 时还须含 treatment×visit。
+- categorical 协变量在 R 用 `factor()`、在 SAS 进入 `CLASS`；缺失协变量的行按 complete-case 与核心变量一致地删除。
+- **不含任何 study-specific 默认变量。** 统计师没写的协变量就不进入模型。
+
+## issue 语义：未采用候选=不适用
+
+“采用”只接受候选中能直接成为该规则类别最终定义的内容。候选里的附加限制、可选维度、访视窗口、额外筛选或展示细节，若统计师未明确保留，视为**不适用**，不产生 issue。只有以下情况才生成 `REVIEW/<TFL>/<规则类别>`：
+1. 统计师明确需要的内容无法由现有 schema/renderer 表达；
+2. 必需的统计决策本身没有明确来源；
+3. Section 3 采用的数据集无法在既有 manifest 中唯一解析。
+
+dataset binding（逻辑数据集名 → 实际文件/格式/路径/SHA）不要求统计师在 review 手写；Compile 按 Section 3 采用的数据集名从既有 manifest 解析，finalization 用既有实体/manifest 校验一致性。
 
 ## dataset.binding_mode：按 analysis 逐个决定
 
@@ -90,7 +126,7 @@ derivations
 filters
 groups
 endpoint_definitions
-fixed_effects
+model_terms
 reml
 covariance.primary 与 covariance.fallback
 df_method
