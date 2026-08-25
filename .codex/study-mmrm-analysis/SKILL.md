@@ -1,6 +1,6 @@
 ---
 name: study-mmrm-analysis
-description: 用于构建由统计师审阅 Markdown、批准的 typed analysis plan 和确定性 runtime contract 驱动的 study 级 MMRM 工作流，逐 TFL 生成自包含 R/SAS 程序。
+description: 管理 study 级 MMRM 的 AI 候选、统计师审阅复检、未解决问题自动刷新、Compile Analysis Plan、finalization、批准与逐 TFL 自包含 R/SAS 程序生成。当用户说“已审阅”“已修改 review”“继续检查”“复检”“解决 issues”，或要求编译/批准 MMRM analysis plan、处理 statistical review 时使用。
 ---
 
 # Study MMRM Analysis
@@ -46,12 +46,34 @@ output/analyses/<safe_analysis_id>/ + output/tfl-output-manifest.csv
 
 数据到达后**必须重新编译 analysis plan、重新 finalize、重新 approve-and-generate**。只把 `DATA_AVAILABLE` 改成 TRUE/YES 是无效且被禁止的。
 
+## 审阅闭环、issue 归属与状态
+
+- **唯一事实来源：** 统计师只编辑第 3 节每个 (TFL, 规则类别) 单元的“统计师审阅意见”。第 7 节未解决问题由 AI 每轮从第 3 节完全重建，统计师不手动编辑 issue，不手写 resolution/status。
+- **issue 派生：** 仍不可唯一执行的单元各生成一条稳定 ID `REVIEW/<TFL ID>/<规则类别>`；可执行单元不产生 issue；全部可执行时第 7 节为空表。第 7 节是当前快照，不保留历史行。
+- **复检循环（用户说“已审阅/继续/复检”等时触发，纯 agent step，只读 review + 现有 R 校验）：**
+  1. 读当前 `statistician-review/statistical-review.md`。
+  2. 按优先级解释每个单元：明确修订 > 采用（候选唯一、完整、含全部 typed 字段）> 同上表（向前继承并展开为完整取值）。
+  3. 完全重建第 7 节。
+  4. 仍有未解决单元：不写 candidate；保持 `review_status=pending`、`finalization_status=pending`；删除陈旧 `analysis-plan.candidate.yaml` 与残留 approval hashes；告知统计师需改哪些单元。
+  5. 全部可执行：写 `analysis-plan.candidate.yaml`；置 `review_status=ready_for_compilation`、`finalization_status=pending`；运行 `scripts/finalize_statistical_review.R --study-dir=<study> --reviewer=<identity>`。
+  6. finalization 失败：R 把当轮 `PLAN-*` 写入第 7 节、review 回 `pending`/`blocked_pending_resolution`，回到统计师继续循环。
+  7. finalization 成功：review 置 `approved`/`published`，正式 `analysis-plan.yaml` 发布。
+
+| 阶段 | review_status | finalization_status |
+|---|---|---|
+| 等待统计师改第 3 节 | pending | pending 或 blocked_pending_resolution |
+| AI 已产出完整 candidate | ready_for_compilation | pending |
+| R 校验失败 | pending | blocked_pending_resolution |
+| R 校验通过 | approved | published |
+
+不新增 watcher / 编排脚本 / R 自然语言编译器 / 新门禁。
+
 ## 受控工作流
 
 1. `scripts/init_study.ps1 -StudyDir <study>` 初始化目录。
 2. 将当前 study source 放入 `input/`，运行 `scripts/generate_intake_review.R --study-dir=<study>`；它由确定性 R intake 发现 TFL，生成 pending review 骨架（八个 section + 每个 TFL 一张五列十类规则候选表，候选/证据单元格留给下一步 AI 填写），并生成全量 ADaM profile `backup-trace/intake-mmrm-profile.yaml`（变量、类型、真实水平、PARAMCD/PARAM、treatment levels 与 specification 变量级对齐）。同时写出仅作占位的 null-containing `analysis-plan.yaml` 模板——它在 Compile 之前**不是**正式决策来源，统计师不编辑它。
 3. **AI Candidate Generation**：AI 读取全部 registered input、`backup-trace/intake-mmrm-profile.yaml`、SAP、shell 和 ADaM specification extraction，为每个 TFL 的十类规则填写唯一、明确、带证据的候选规则与识别状态，写回同一个 `statistical-review.md`。必须充分利用 profile/spec 的真实变量、类型、PARAMCD、treatment levels 和 specification 变量定义；无法唯一确定的项写“未识别/当前不可执行”并在第 7 节建 issue，**不得只罗列所有可能 dataset 或 PARAMCD**。AI 不写 YAML、不签名、不从 profile defaults 填补未决定值。
-4. 统计师只在 review 中填写“统计师审阅意见”和 issue resolutions。
+4. 统计师只在 review 第 3 节填写“统计师审阅意见”单元格；第 7 节 issue 由 AI 每轮从第 3 节重建，统计师不手动编辑。
 5. AI 按 `references/analysis-plan-compilation.md` 执行 **Compile Analysis Plan**（只读 review）：产出候选 `analysis-plan.candidate.yaml` 并置 `review_status=ready_for_compilation`，不修改正式 plan。所有分析必须完整、自包含并带 closed trace map，并按上一节规则选定 `binding_mode`。
 6. 运行 `scripts/finalize_statistical_review.R --study-dir=<study> --reviewer=<identity>`；R 校验 candidate，成功用原子事务把它提升为正式 `analysis-plan.yaml` 并把 review 置为 `approved`/`published`（零 unresolved issues）；失败则正式 plan 不变、review 回 `pending` 并在第 7 节列出 issues。
 7. 需要生成程序时，仅运行：

@@ -20,7 +20,7 @@ Compile 阶段**只能读取当前 `statistician-review/statistical-review.md`**
 
 ## 输出契约
 
-唯一输出是完整的候选 `statistician-review/analysis-plan.candidate.yaml`，schema 版本 **`2.1`**。**不修改正式 `analysis-plan.yaml`**，也不写 review 的 reviewer / approval time / signature / hash 字段（这些由 R finalization 写）。编译并通过跨行逻辑检查后，把 working review 的 `review_status` 置为 `ready_for_compilation`。
+唯一输出是完整的候选 `statistician-review/analysis-plan.candidate.yaml`，schema 版本 **`2.1`**。**不修改正式 `analysis-plan.yaml`**，也不写 review 的 reviewer / approval time / signature / hash 字段（这些由 R finalization 写）。编译并通过跨行逻辑检查后，把 working review 的 `review_status` 置为 `ready_for_compilation`、`finalization_status` 置为 `pending`，并清空陈旧 approval hashes（详见“每轮复检、issue 重建与失败处理”）。
 
 对每个字段：
 
@@ -123,9 +123,13 @@ treatment：适用时的 reference / comparator / contrast_direction / confidenc
 
 不要在 plan 里手写输出文件名。contract 编译时由 compiler 从安全化 TFL identity 机械生成八个互不重叠的字段：`r_raw_file`、`r_final_file`、`r_diagnostic_file`、`r_run_record_file`、`sas_raw_file`、`sas_final_file`、`sas_diagnostic_file`、`sas_run_record_file`。IR 与 renderer 只能逐字复制。
 
-## 跨行逻辑检查与失败处理
+## 每轮复检、issue 重建与失败处理
 
-编译前 AI 必须做跨行一致性检查：dataset / mappings / endpoint / treatment / model / estimands 相互一致，且第 7 节没有 unresolved issue。任一不一致或有 unresolved issue 时：**不产出可发布 candidate**，把问题写进第 7 节，保持/恢复 `review_status: pending`，由统计师处置后重新 Compile。只有全部通过才写 `analysis-plan.candidate.yaml` 并置 `ready_for_compilation`。
+每次触发 Compile（用户“已审阅/继续/复检”等），AI 先按“明确修订 > 采用 > 同上表”重新解释第 3 节每个 (TFL, 规则类别) 单元，并**从第 3 节完全重建第 7 节**：仍不可唯一执行的单元各生成一条稳定 ID `REVIEW/<TFL ID>/<规则类别>` 的 issue；可执行单元不产生 issue。第 7 节是当前快照，不保留历史行，统计师不手动编辑。
+
+编译前 AI 还须做跨行一致性检查：dataset / mappings / endpoint / treatment / model / estimands 相互一致。任一单元不可唯一执行或跨行不一致时：**不产出可发布 candidate**，重建后的第 7 节保留这些 issue，保持/恢复 `review_status: pending`、`finalization_status: pending`，删除陈旧 `analysis-plan.candidate.yaml`，由统计师改第 3 节后重新 Compile。
+
+只有全部单元可执行且跨行一致时，才写 `analysis-plan.candidate.yaml`，并把 working review 置为 `review_status: ready_for_compilation`、`finalization_status: pending`，同时清空陈旧 approval hashes（`analysis_plan_sha256` / `source_evidence_sha256` / `review_execution_content_sha256` / `approval_payload_sha256`）。**不写** `reviewed_by` / `reviewed_at_utc` / 签名（这些由 R finalization 写）。
 
 reviewer identity 由触发 Compile 的统计师提供，一路传给 finalization（`--reviewer=<identity>`）；统计师不手动编辑 review 状态字段。
 

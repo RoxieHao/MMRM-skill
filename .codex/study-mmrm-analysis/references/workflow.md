@@ -261,8 +261,8 @@ failed
 1. `scripts/init_study.ps1 -StudyDir studies/<study_id>` 初始化目录。
 2. 把当前 study 的 source 放入 `input/`，运行 `scripts/generate_intake_review.R --study-dir=<study>`。确定性 R intake 发现 TFL，生成 pending review 骨架（八 section + 每 TFL 一张五列十类规则候选表，候选/证据单元格留待 AI 填写）与全量 ADaM profile `backup-trace/intake-mmrm-profile.yaml`（变量、类型、真实水平、PARAMCD/PARAM、treatment levels 与 specification 变量级对齐）。含 `null` 的 `analysis-plan.yaml` 仅是占位模板，在 Compile 前不是正式决策来源，统计师不编辑它。
 3. **AI Candidate Generation**：AI 读取全部 registered input、`backup-trace/intake-mmrm-profile.yaml`、SAP、shell 和 ADaM specification，为每个 TFL 的十类规则填写唯一、带证据的候选与识别状态，写回同一个 `statistician-review/statistical-review.md`。必须使用 profile/spec 的真实变量、类型、PARAMCD、treatment levels 与 specification 定义；无法唯一确定的项写“未识别/当前不可执行”并在第 7 节建 issue，不得只罗列所有可能 dataset 或 PARAMCD。AI 不写 YAML、不签名、不从 defaults 填补。
-4. 统计师只在 `statistician-review/statistical-review.md` 中填写“统计师审阅意见”和 issue resolutions。
-5. AI 按 `references/analysis-plan-compilation.md` 执行 **Compile Analysis Plan**（只读 review）：产出候选 `statistician-review/analysis-plan.candidate.yaml` 并置 `review_status=ready_for_compilation`，不改正式 plan。每个 analysis 必须完整、自包含、带 closed trace map，并按第 2 节规则选定 `binding_mode`。
+4. 统计师只在 `statistician-review/statistical-review.md` 第 3 节填写“统计师审阅意见”单元格。第 7 节 issue 由 AI 每轮从第 3 节完全重建，统计师不手动编辑 issue、不手写 resolution/status。
+5. 统计师说“已审阅/继续/复检”等触发 AI 按 `references/analysis-plan-compilation.md` 执行 **Compile Analysis Plan**（只读 review）：每轮从第 3 节重建第 7 节；全部单元可执行时产出候选 `statistician-review/analysis-plan.candidate.yaml` 并置 `review_status=ready_for_compilation`、`finalization_status=pending`、清空陈旧 approval hashes，不改正式 plan；仍有未解决单元时保持 `pending`、不产出 candidate。每个 analysis 必须完整、自包含、带 closed trace map，并按第 2 节规则选定 `binding_mode`。
 6. `scripts/finalize_statistical_review.R --study-dir=<study> --reviewer=<identity>`：R 校验 candidate，成功用原子事务提升为正式 `analysis-plan.yaml` 并把 review 置 `approved`/`published`（零 unresolved issue）；失败则正式 plan 不变、review 回 `pending`。
 7. 需要生成程序时只运行一条命令：
    `scripts/approve_and_generate_analysis.R --study-dir=<study> --reviewer=<identity>`。
