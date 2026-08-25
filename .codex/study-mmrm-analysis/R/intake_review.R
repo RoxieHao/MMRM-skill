@@ -296,7 +296,7 @@ intake_render_review <- function(study_dir, project_dir, route, discovery) {
 }
 
 write_intake_statistical_review <- function(study_dir, project_dir, route, replace_pending = FALSE) {
-  review_path <- file.path(study_dir, "statistician-review", "statistical-review.md"); plan_path <- analysis_plan_path(study_dir)
+  review_path <- file.path(study_dir, "statistician-review", "statistical-review.md"); plan_path <- analysis_plan_template_path(study_dir)
   if (file.exists(review_path)) {
     current <- read_statistical_review(review_path)
     review_status <- trimws(as.character(current$metadata$review_status))

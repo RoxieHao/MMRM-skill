@@ -51,4 +51,9 @@ planned_plan <- plan; planned_plan$execution_context[c("data_availability", "dat
 linked_restored <- compile_and_finalize(plan); stopifnot(linked_restored$approved)
 # 7) approve 只消费 approved/published：生成 contract+programs，不改 review 状态。
 chain <- approve_and_generate_analysis(study_dir, project_dir, "Synthetic Reviewer"); stopifnot(identical(chain$review$metadata$review_status, "approved"), identical(as.character(chain$review$metadata$finalization_status), "published"), file.exists(analysis_contract_path(study_dir)), file.exists(file.path(study_dir, "analysis", "r", "MMRM-01.R")), file.exists(file.path(study_dir, "analysis", "r", "run_all_mmrm.R")), file.exists(file.path(study_dir, "analysis", "sas", "MMRM-01.sas")), !file.exists(file.path(study_dir, "analysis", "sas", "MMRM-01_template.sas")))
+# 8) blocked 渲染：丢弃陈旧 PLAN-*，保留非 PLAN 行，追加当轮机器问题（无累积）。
+stale_existing <- data.frame(issue_id = c("PLAN-SCHEMA-STALE", "REVIEW/T14-01/fixed_effects"), scope = c("ALL", "T14-01"), question_or_risk = c("old machine blocker", "genuine open item"), resolution = c("n/a", "pending"), status = c("unresolved", "unresolved"), stringsAsFactors = FALSE, check.names = FALSE)
+fresh_generated <- review_finalize_issue_frame("PLAN-MODEL-INVALID", "ALL", "covariance", "observed", "requirement", "fix")
+blocked_section <- review_finalize_render_blocked_section(stale_existing, fresh_generated)
+stopifnot(!any(grepl("PLAN-SCHEMA-STALE", blocked_section, fixed = TRUE)), any(grepl("REVIEW/T14-01/fixed_effects", blocked_section, fixed = TRUE)), any(grepl("PLAN-MODEL-INVALID", blocked_section, fixed = TRUE)))
 unlink(study_dir, recursive = TRUE, force = TRUE); stopifnot(!dir.exists(study_dir)); cat("Analysis plan finalization and approval hash focused check passed.\n")

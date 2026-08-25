@@ -71,7 +71,7 @@ output/analyses/<safe_analysis_id>/ + output/tfl-output-manifest.csv
 ## 受控工作流
 
 1. `scripts/init_study.ps1 -StudyDir <study>` 初始化目录。
-2. 将当前 study source 放入 `input/`，运行 `scripts/generate_intake_review.R --study-dir=<study>`；它由确定性 R intake 发现 TFL，生成 pending review 骨架（八个 section + 每个 TFL 一张五列十类规则候选表，候选/证据单元格留给下一步 AI 填写），并生成全量 ADaM profile `backup-trace/intake-mmrm-profile.yaml`（变量、类型、真实水平、PARAMCD/PARAM、treatment levels 与 specification 变量级对齐）。同时写出仅作占位的 null-containing `analysis-plan.yaml` 模板——它在 Compile 之前**不是**正式决策来源，统计师不编辑它。
+2. 将当前 study source 放入 `input/`，运行 `scripts/generate_intake_review.R --study-dir=<study>`；它由确定性 R intake 发现 TFL，生成 pending review 骨架（八个 section + 每个 TFL 一张五列十类规则候选表，候选/证据单元格留给下一步 AI 填写），并生成全量 ADaM profile `backup-trace/intake-mmrm-profile.yaml`（变量、类型、真实水平、PARAMCD/PARAM、treatment levels 与 specification 变量级对齐）。同时写出仅作占位的 null-containing `analysis-plan.template.yaml`——正式 `analysis-plan.yaml` 只由 finalization 创建，它在 Compile 之前**不存在**，统计师不编辑模板。
 3. **AI Candidate Generation**：AI 读取全部 registered input、`backup-trace/intake-mmrm-profile.yaml`、SAP、shell 和 ADaM specification extraction，为每个 TFL 的十类规则填写唯一、明确、带证据的候选规则与识别状态，写回同一个 `statistical-review.md`。必须充分利用 profile/spec 的真实变量、类型、PARAMCD、treatment levels 和 specification 变量定义；无法唯一确定的项写“未识别/当前不可执行”并在第 7 节建 issue，**不得只罗列所有可能 dataset 或 PARAMCD**。AI 不写 YAML、不签名、不从 profile defaults 填补未决定值。
 4. 统计师只在 review 第 3 节填写“统计师审阅意见”单元格；第 7 节 issue 由 AI 每轮从第 3 节重建，统计师不手动编辑。
 5. AI 按 `references/analysis-plan-compilation.md` 执行 **Compile Analysis Plan**（只读 review）：产出候选 `analysis-plan.candidate.yaml` 并置 `review_status=ready_for_compilation`，不修改正式 plan。所有分析必须完整、自包含并带 closed trace map，并按上一节规则选定 `binding_mode`。

@@ -1,6 +1,8 @@
 analysis_plan_path <- function(study_dir) file.path(study_dir, "statistician-review", "analysis-plan.yaml")
 # AI Compile 产出的候选 plan（只读 review 编译得到）；R finalization 校验后原子提升为正式 analysis-plan.yaml。
 analysis_plan_candidate_path <- function(study_dir) file.path(study_dir, "statistician-review", "analysis-plan.candidate.yaml")
+# intake 阶段写出的 null 占位骨架；非正式决策来源。正式 analysis-plan.yaml 只由 finalization 创建。
+analysis_plan_template_path <- function(study_dir) file.path(study_dir, "statistician-review", "analysis-plan.template.yaml")
 analysis_plan_trace_keys <- function() c("dataset", "adapter", "mappings", "derivations", "filters", "groups", "endpoint_definitions", "fixed_effects", "reml", "covariance", "df_method", "estimands", "treatment")
 
 analysis_plan_validate_execution_context <- function(context) standard_validate_execution_context(context, "analysis_plan.execution_context")
