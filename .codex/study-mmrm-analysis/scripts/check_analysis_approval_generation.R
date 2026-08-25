@@ -337,7 +337,7 @@ p5_analysis_plan_analysis <- function(analysis_id, tfl_id, title, binding_mode, 
   dimensions <- list(instrument = list(variable = "not_applicable", values = character()), version = list(variable = "not_applicable", values = character()),
                      reporter = list(variable = "not_applicable", values = character()), subscale = list(variable = "not_applicable", values = character()))
   trace <- setNames(rep(list(list()), length(analysis_plan_trace_keys())), analysis_plan_trace_keys())
-  for (name in c("dataset", "mappings", "groups", "endpoint_definitions", "fixed_effects", "reml", "covariance", "df_method", "estimands")) trace[[name]] <- list(evidence_id)
+  for (name in c("dataset", "mappings", "groups", "endpoint_definitions", "model_terms", "reml", "covariance", "df_method", "estimands")) trace[[name]] <- list(evidence_id)
   if (!is.null(adapter)) trace$adapter <- list(evidence_id)
   dataset <- if (identical(binding_mode, "linked")) {
     list(binding_mode = "linked", file = "scores.csv", format = "csv", relative_path = project_relative_path(source_path, project_dir), sha256 = file_sha256(source_path))
@@ -348,7 +348,7 @@ p5_analysis_plan_analysis <- function(analysis_id, tfl_id, title, binding_mode, 
        groups = list(list(id = "TOTAL", label = "Total", predicates = list(list(variable = "PARAMCD", operator = "eq", value = "SCORE_A")))),
        endpoint_definitions = list(list(group_id = "TOTAL", endpoint_variable = "PARAMCD", selected_codes = "SCORE_A", selection_mode = "single_code",
                                         dimensions = dimensions, row_allocation_rule = "one_row_per_subject_endpoint_visit")),
-       fixed_effects = as.list(c("visit", "baseline", "baseline_by_visit")), reml = TRUE,
+       model_terms = list(list(kind = "main_effect", role = "visit"), list(kind = "main_effect", role = "baseline"), list(kind = "interaction", of = list("baseline", "visit"))), reml = TRUE,
        covariance = list(primary = "UN", fallback = as.list(c("AR1", "CS"))), df_method = "Kenward-Roger",
        estimands = list(visit_lsmeans = TRUE, treatment_visit_lsmeans = FALSE, pairwise_differences = FALSE), treatment = NULL, trace = trace)
 }
@@ -387,7 +387,7 @@ p5_study_plan <- function(fixture, ids = list(c("MMRM-20", "T14-20"), c("MMRM-03
   analyses <- lapply(seq_along(ids), function(i) p5_analysis_plan_analysis(ids[[i]][[1L]], ids[[i]][[2L]], paste0("Synthetic analysis ", ids[[i]][[1L]]),
                                                                           fixture$binding_mode, fixture$source_path, project_dir, fixture$evidence_id,
                                                                           adapter = if (!is.null(adapter_index) && identical(i, adapter_index)) adapter else NULL))
-  list(analysis_plan_schema_version = "2.1", study_id = fixture$study_id,
+  list(analysis_plan_schema_version = "2.2", study_id = fixture$study_id,
        execution_context = list(profile_version = standard_mmrm_profile_version(),
                                 data_availability = if (linked) "available" else "none",
                                 data_classification = if (linked) "dummy" else "none",

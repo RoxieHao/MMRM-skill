@@ -37,21 +37,28 @@
 
 ### 3.1 统一模型项 schema
 
-analysis-plan schema 从 `2.1` 升级到新版本。移除 `fixed_effects` 词表，替换为按声明顺序的 `model_terms`：
+analysis-plan schema 从 `2.1` 升级到新版本。移除 `fixed_effects` 词表，替换为按声明顺序的 `model_terms`。核心 MMRM 项继续用**角色 token**（保留已验证/SHA-pinned/golden 的核心渲染，engine 将实际列重命名为标准化内部名）；统计师明确声明的额外协变量用**真实变量**表达：
 
 ```yaml
 model_terms:
   - kind: main_effect
+    role: visit
+  - kind: main_effect
+    role: baseline
+  - kind: interaction
+    of: [baseline, visit]
+  - kind: main_effect
     variable: <数据集中存在的变量>
     variable_type: categorical | numeric
   - kind: interaction
-    variables: [<已声明的 main effect 变量>, ...]
+    of: [<角色或已声明变量>, <角色或已声明变量>]
 ```
 
 约束：
-- `main_effect`：变量必须存在于该 analysis 所选 dataset 的既有 profile；`variable_type` 只能是 `categorical` 或 `numeric`。
-- `interaction`：只能引用已声明为 main effect 的两个或以上变量；不允许自由文本、转换或嵌套表达式。
-- 同一 main effect 不得重复；interaction 按变量集合去重，变量顺序不影响同一性。
+- 核心项用 `role ∈ {visit, baseline, treatment}`；treatment 角色仅在存在 treatment mapping/block 时允许。
+- 额外项用 `variable`（必须存在于该 analysis 所选 dataset 的既有 profile）+ `variable_type ∈ {categorical, numeric}`。
+- `interaction` 的 `of` 只能引用已声明为 main effect 的角色或变量（≥2 个）；不允许自由文本、转换或嵌套表达式。
+- 同一 main effect 不得重复；interaction 按其成员集合去重，顺序不影响同一性。
 - 保留现有 MMRM 必要结构校验：必须含 visit、baseline、baseline×visit；有 treatment 时必须含 treatment×visit。
 - 旧 `fixed_effects` 不再接受；旧 `2.1` plan 不做隐式兼容，必须重新 Compile/finalize。
 - schema 不含任何 study-specific 默认项。

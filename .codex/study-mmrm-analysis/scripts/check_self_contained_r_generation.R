@@ -93,8 +93,8 @@ self_contained_fixture <- function(binding_mode = "linked", analysis_id = "MMRM-
     groups <- c(groups, list(self_contained_group("SUBSCALE", "Subscale score", "SCORE_C", NULL, "sub1", special)))
     endpoints <- c(endpoints, list(self_contained_endpoint("SUBSCALE", "SCORE_C", NULL, "sub1")))
   }
-  fixed_effects <- c("baseline", "visit", "baseline_by_visit")
-  if (treatment) fixed_effects <- c(fixed_effects, "treatment", "treatment_by_visit")
+  model_terms <- list(list(kind = "main_effect", role = "baseline"), list(kind = "main_effect", role = "visit"), list(kind = "interaction", of = list("baseline", "visit")))
+  if (treatment) model_terms <- c(model_terms, list(list(kind = "main_effect", role = "treatment"), list(kind = "interaction", of = list("treatment", "visit"))))
   analysis <- list(
     analysis_id = analysis_id, tfl_id = tfl_id,
     title = if (special) self_contained_special_text("Synthetic self-contained analysis") else "Synthetic self-contained analysis",
@@ -103,7 +103,7 @@ self_contained_fixture <- function(binding_mode = "linked", analysis_id = "MMRM-
                    sha256 = if (linked) (if (is.null(dataset_sha256)) self_contained_hash("A") else dataset_sha256) else NULL),
     mappings = mappings, derivations = derivation_list, filters = filter_list,
     groups = groups, endpoint_definitions = endpoints,
-    fixed_effects = as.list(fixed_effects), reml = TRUE, covariance = covariance,
+    model_terms = model_terms, reml = TRUE, covariance = covariance,
     df_method = "Satterthwaite",
     estimands = list(visit_lsmeans = TRUE, treatment_visit_lsmeans = treatment, pairwise_differences = treatment && pairwise),
     output = standard_contract_expected_output(tfl_id)

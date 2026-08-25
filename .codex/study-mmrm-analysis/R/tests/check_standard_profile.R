@@ -217,7 +217,7 @@ p6_plan_analysis <- function(analysis_id, tfl_id, binding_mode, source_path, pro
   dimensions <- list(instrument = list(variable = "not_applicable", values = character()), version = list(variable = "not_applicable", values = character()),
                      reporter = list(variable = "not_applicable", values = character()), subscale = list(variable = "not_applicable", values = character()))
   trace <- setNames(rep(list(list()), length(analysis_plan_trace_keys())), analysis_plan_trace_keys())
-  for (name in c("dataset", "mappings", "groups", "endpoint_definitions", "fixed_effects", "reml", "covariance", "df_method", "estimands")) trace[[name]] <- list(evidence_id)
+  for (name in c("dataset", "mappings", "groups", "endpoint_definitions", "model_terms", "reml", "covariance", "df_method", "estimands")) trace[[name]] <- list(evidence_id)
   dataset <- if (identical(binding_mode, "linked")) {
     list(binding_mode = "linked", file = "scores.csv", format = "csv", relative_path = project_relative_path(source_path, project_dir), sha256 = file_sha256(source_path))
   } else list(binding_mode = "planned", file = "scores.csv", format = "csv", relative_path = NULL, sha256 = NULL)
@@ -228,7 +228,7 @@ p6_plan_analysis <- function(analysis_id, tfl_id, binding_mode, source_path, pro
        groups = list(list(id = "TOTAL", label = "Total", predicates = list(list(variable = "PARAMCD", operator = "eq", value = "SCORE_A")))),
        endpoint_definitions = list(list(group_id = "TOTAL", endpoint_variable = "PARAMCD", selected_codes = "SCORE_A", selection_mode = "single_code",
                                         dimensions = dimensions, row_allocation_rule = "one_row_per_subject_endpoint_visit")),
-       fixed_effects = as.list(c("visit", "baseline", "baseline_by_visit")), reml = TRUE,
+       model_terms = list(list(kind = "main_effect", role = "visit"), list(kind = "main_effect", role = "baseline"), list(kind = "interaction", of = list("baseline", "visit"))), reml = TRUE,
        covariance = list(primary = "CS", fallback = as.list("AR1")), df_method = "Satterthwaite",
        estimands = list(visit_lsmeans = TRUE, treatment_visit_lsmeans = FALSE, pairwise_differences = FALSE), treatment = NULL, trace = trace)
 }
@@ -265,7 +265,7 @@ p6_cleanup <- function() unlink(fixture$study_dir, recursive = TRUE, force = TRU
 on.exit(p6_cleanup(), add = TRUE)
 mixed_ids <- list(c("MMRM-30", "T14-30", "linked"), c("MMRM-10", "T14-10", "planned"), c("MMRM-20", "T14-20", "linked"))
 plan <- list(
-  analysis_plan_schema_version = "2.1", study_id = fixture$study_id,
+  analysis_plan_schema_version = "2.2", study_id = fixture$study_id,
   execution_context = list(profile_version = standard_mmrm_profile_version(), data_availability = "available",
                            data_classification = "dummy", intended_use = "technical_validation",
                            sas_execution_profile = "sas-9.4m5-self-contained/v1"),

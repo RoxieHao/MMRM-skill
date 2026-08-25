@@ -6,14 +6,14 @@ analysis_plan_statistical_projection <- function(plan) {
   validate_analysis_plan(plan)
   list(
     execution_context = plan$execution_context,
-    analyses = lapply(plan$analyses, function(x) list(analysis_id = x$analysis_id, tfl_id = x$source_tfl_id, title = x$title, dataset = x$dataset, adapter = x$adapter, mappings = x$mappings, derivations = x$derivations, filters = x$filters, groups = x$groups, endpoint_definitions = x$endpoint_definitions, fixed_effects = x$fixed_effects, reml = x$reml, covariance = x$covariance, df_method = x$df_method, estimands = x$estimands, treatment = x$treatment))
+    analyses = lapply(plan$analyses, function(x) list(analysis_id = x$analysis_id, tfl_id = x$source_tfl_id, title = x$title, dataset = x$dataset, adapter = x$adapter, mappings = x$mappings, derivations = x$derivations, filters = x$filters, groups = x$groups, endpoint_definitions = x$endpoint_definitions, model_terms = x$model_terms, reml = x$reml, covariance = x$covariance, df_method = x$df_method, estimands = x$estimands, treatment = x$treatment))
   )
 }
 standard_contract_statistical_projection <- function(contract) {
   validate_compiled_analysis_contract(contract)
   list(
     execution_context = c(list(profile_version = contract$profile_version), contract$execution[c("data_availability", "data_classification", "intended_use", "sas_execution_profile")]),
-    analyses = lapply(contract$analyses, function(x) list(analysis_id = x$analysis_id, tfl_id = x$tfl_id, title = x$title, dataset = x$dataset, adapter = if (is.null(x$adapter_file)) NULL else list(file = x$adapter_file, sha256 = x$adapter_sha256), mappings = x$mappings, derivations = x$derivations, filters = x$filters, groups = x$groups, endpoint_definitions = x$endpoint_definitions, fixed_effects = x$fixed_effects, reml = x$reml, covariance = x$covariance, df_method = x$df_method, estimands = x$estimands, treatment = x$treatment))
+    analyses = lapply(contract$analyses, function(x) list(analysis_id = x$analysis_id, tfl_id = x$tfl_id, title = x$title, dataset = x$dataset, adapter = if (is.null(x$adapter_file)) NULL else list(file = x$adapter_file, sha256 = x$adapter_sha256), mappings = x$mappings, derivations = x$derivations, filters = x$filters, groups = x$groups, endpoint_definitions = x$endpoint_definitions, model_terms = x$model_terms, reml = x$reml, covariance = x$covariance, df_method = x$df_method, estimands = x$estimands, treatment = x$treatment))
   )
 }
 assert_plan_contract_parity <- function(plan, contract) {
@@ -25,7 +25,7 @@ assert_plan_contract_parity <- function(plan, contract) {
 compile_analysis_plan_contract <- function(plan, approval) {
   validate_analysis_plan(plan); standard_assert_keys(approval, c("review_file", "review_sha256", "analysis_plan_file", "analysis_plan_sha256", "approval_payload_sha256", "source_evidence_sha256", "reviewed_by", "approved_at_utc"), character(), "approval")
   analyses <- lapply(plan$analyses, function(x) {
-    result <- list(analysis_id = x$analysis_id, tfl_id = x$source_tfl_id, title = x$title, dataset = x$dataset, mappings = x$mappings, derivations = x$derivations, filters = x$filters, groups = x$groups, endpoint_definitions = x$endpoint_definitions, fixed_effects = x$fixed_effects, reml = x$reml, covariance = x$covariance, df_method = x$df_method, estimands = x$estimands, output = standard_contract_expected_output(x$source_tfl_id))
+    result <- list(analysis_id = x$analysis_id, tfl_id = x$source_tfl_id, title = x$title, dataset = x$dataset, mappings = x$mappings, derivations = x$derivations, filters = x$filters, groups = x$groups, endpoint_definitions = x$endpoint_definitions, model_terms = x$model_terms, reml = x$reml, covariance = x$covariance, df_method = x$df_method, estimands = x$estimands, output = standard_contract_expected_output(x$source_tfl_id))
     if (!is.null(x$treatment)) result$treatment <- x$treatment
     if (!is.null(x$adapter)) { result$adapter_file <- x$adapter$file; result$adapter_sha256 <- toupper(x$adapter$sha256) }
     result

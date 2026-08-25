@@ -122,6 +122,113 @@ standard_validate_endpoint_dimension <- function(dimension, context) {
   invisible(TRUE)
 }
 
+# --- model_terms (schema 2.2) ------------------------------------------------
+# 单一事实来源：把结构化 model_terms 归一化成 (core 角色 token, 额外协变量主效应,
+# 额外交互)。core 保留现有已验证渲染的角色抽象；额外项用真实变量表达。
+# 所有 renderer / conformance 都必须消费本函数的输出，不各自解释 model_terms。
+standard_model_term_roles <- function() c("visit", "baseline", "treatment")
+
+standard_model_term_member_key <- function(member) {
+  # member: list(kind = "role"|"variable", name = <token or variable>)
+  paste0(member$kind, ":", member$name)
+}
+
+# 角色 → 内部标准化列名（R engine 与自包含 R 用 *_f/baseline；SAS 用 _* 前缀）。
+standard_model_role_r_token <- function() c(visit = "visit_f", baseline = "baseline", treatment = "treatment_f")
+standard_model_role_sas_token <- function() c(visit = "_visit", baseline = "_baseline", treatment = "_treatment")
+
+standard_normalize_model_terms <- function(analysis, available_variables = NULL, context = "analysis") {
+  terms <- analysis$model_terms
+  standard_sequence(terms, paste0(context, ".model_terms"), TRUE)
+  roles <- standard_model_term_roles()
+  role_r <- standard_model_role_r_token(); role_sas <- standard_model_role_sas_token()
+  main_role <- character(); covariates <- list(); covariate_type <- character(); main_keys <- character()
+  parsed <- vector("list", length(terms))
+  for (i in seq_along(terms)) {
+    term <- terms[[i]]; tc <- paste0(context, ".model_terms[[", i, "]]")
+    if (!is.list(term) || is.null(term$kind)) stop(tc, " must have a kind.")
+    kind <- standard_scalar_character(term$kind, paste0(tc, ".kind"))
+    if (identical(kind, "main_effect")) {
+      has_role <- "role" %in% names(term); has_variable <- "variable" %in% names(term)
+      if (identical(has_role, has_variable)) stop(tc, " main_effect must set exactly one of role/variable.")
+      if (has_role) {
+        standard_assert_keys(term, c("kind", "role"), character(), tc)
+        role <- standard_scalar_character(term$role, paste0(tc, ".role"))
+        if (!role %in% roles) stop(tc, ".role must be one of: ", paste(roles, collapse = ", "))
+        key <- paste0("role:", role)
+        if (key %in% main_keys) stop(tc, " duplicates main effect role ", role, ".")
+        main_keys <- c(main_keys, key); main_role <- c(main_role, role)
+        parsed[[i]] <- list(type = "main_role", role = role)
+      } else {
+        standard_assert_keys(term, c("kind", "variable", "variable_type"), character(), tc)
+        standard_validate_sas_v7_name(term$variable, paste0(tc, ".variable")); variable <- as.character(term$variable)
+        variable_type <- standard_scalar_character(term$variable_type, paste0(tc, ".variable_type"))
+        if (!variable_type %in% c("categorical", "numeric")) stop(tc, ".variable_type must be categorical or numeric.")
+        key <- paste0("variable:", variable)
+        if (key %in% main_keys) stop(tc, " duplicates main effect variable ", variable, ".")
+        main_keys <- c(main_keys, key); covariates[[length(covariates) + 1L]] <- list(variable = variable, variable_type = variable_type); covariate_type[[variable]] <- variable_type
+        parsed[[i]] <- list(type = "main_cov", variable = variable, variable_type = variable_type)
+      }
+    } else if (identical(kind, "interaction")) {
+      standard_assert_keys(term, c("kind", "of"), character(), tc)
+      of <- term$of
+      if ((!is.list(of) && !is.atomic(of)) || !is.null(names(of)) || length(unlist(of, use.names = FALSE)) < 2L) stop(tc, ".of must be an unnamed sequence of at least two members.")
+      members <- as.character(unlist(of, use.names = FALSE))
+      if (anyNA(members) || any(!nzchar(trimws(members)))) stop(tc, ".of members must be nonempty.")
+      parsed[[i]] <- list(type = "interaction", context = tc, members = members)
+    } else stop(tc, ".kind must be main_effect or interaction.")
+  }
+
+  covariate_names <- vapply(covariates, `[[`, character(1), "variable")
+  resolve_member <- function(name, tc) {
+    if (name %in% main_role) return(list(kind = "role", name = name))
+    if (name %in% covariate_names) return(list(kind = "variable", name = name))
+    stop(tc, " interaction member '", name, "' must reference a declared main effect.")
+  }
+
+  # 第二遍：按声明顺序生成 core token、渲染 token、marker，保持顺序稳定（core-only 与旧输出逐字一致）。
+  core <- character(); r_terms <- character(); sas_terms <- character(); markers <- character()
+  interaction_keys <- character()
+  for (item in parsed) {
+    if (identical(item$type, "main_role")) {
+      core <- c(core, item$role); r_terms <- c(r_terms, role_r[[item$role]]); sas_terms <- c(sas_terms, role_sas[[item$role]]); markers <- c(markers, item$role)
+    } else if (identical(item$type, "main_cov")) {
+      r_tok <- if (identical(item$variable_type, "categorical")) paste0("factor(", item$variable, ")") else item$variable
+      r_terms <- c(r_terms, r_tok); sas_terms <- c(sas_terms, item$variable); markers <- c(markers, item$variable)
+    } else {
+      resolved <- lapply(item$members, resolve_member, tc = item$context)
+      keys <- vapply(resolved, standard_model_term_member_key, character(1))
+      if (anyDuplicated(keys)) stop(item$context, " interaction members must be distinct.")
+      set_key <- paste(sort(keys), collapse = "*")
+      if (set_key %in% interaction_keys) stop(item$context, " duplicates an interaction.")
+      interaction_keys <- c(interaction_keys, set_key)
+      member_roles <- vapply(resolved, function(m) if (identical(m$kind, "role")) m$name else "", character(1))
+      is_role_only <- all(nzchar(member_roles))
+      if (is_role_only && length(resolved) == 2L && setequal(member_roles, c("baseline", "visit"))) core <- c(core, "baseline_by_visit")
+      else if (is_role_only && length(resolved) == 2L && setequal(member_roles, c("treatment", "visit"))) core <- c(core, "treatment_by_visit")
+      else if (is_role_only) stop(item$context, " role-only interactions support only baseline*visit and treatment*visit.")
+      member_r <- vapply(resolved, function(m) if (identical(m$kind, "role")) role_r[[m$name]] else if (identical(covariate_type[[m$name]], "categorical")) paste0("factor(", m$name, ")") else m$name, character(1))
+      member_sas <- vapply(resolved, function(m) if (identical(m$kind, "role")) role_sas[[m$name]] else m$name, character(1))
+      member_label <- vapply(resolved, `[[`, character(1), "name")
+      r_terms <- c(r_terms, paste(member_r, collapse = ":")); sas_terms <- c(sas_terms, paste(member_sas, collapse = "*")); markers <- c(markers, paste(member_label, collapse = "_by_"))
+    }
+  }
+  if (anyDuplicated(core)) stop(context, ".model_terms core effects must be unique.")
+
+  if (!is.null(available_variables)) {
+    unknown <- setdiff(covariate_names, available_variables)
+    if (length(unknown)) stop(context, ".model_terms references variables absent from the analysis dataset: ", paste(unknown, collapse = ", "))
+    mapping_reserved <- unname(unlist(analysis$mappings, use.names = FALSE))
+    clash <- intersect(covariate_names, mapping_reserved)
+    if (length(clash)) stop(context, ".model_terms additional covariates must not restate mapping roles: ", paste(clash, collapse = ", "))
+  }
+
+  class_covariates <- covariate_names[vapply(covariate_names, function(v) identical(covariate_type[[v]], "categorical"), logical(1))]
+  list(core = core, covariates = covariates, interactions = NULL,
+       r_terms = r_terms, sas_terms = sas_terms, markers = markers,
+       covariate_variables = covariate_names, class_covariates = as.character(class_covariates))
+}
+
 standard_endpoint_predicate_matches <- function(predicates, definition) {
   matches <- Filter(function(predicate) identical(predicate$variable, definition$endpoint_variable), predicates)
   if (length(matches) != 1L) return(FALSE)
@@ -130,7 +237,7 @@ standard_endpoint_predicate_matches <- function(predicates, definition) {
 }
 
 validate_standard_analysis_definition <- function(analysis, execution_context, context = "analysis", contract = FALSE) {
-  required <- c("analysis_id", if (contract) "tfl_id" else "source_tfl_id", "title", "dataset", "mappings", "derivations", "filters", "groups", "endpoint_definitions", "fixed_effects", "reml", "covariance", "df_method", "estimands")
+  required <- c("analysis_id", if (contract) "tfl_id" else "source_tfl_id", "title", "dataset", "mappings", "derivations", "filters", "groups", "endpoint_definitions", "model_terms", "reml", "covariance", "df_method", "estimands")
   optional <- c(if (contract) c("adapter_file", "adapter_sha256", "output") else c("adapter", "trace"), "treatment")
   standard_assert_keys(analysis, required, optional, context)
   standard_validate_id(analysis$analysis_id, paste0(context, ".analysis_id")); standard_validate_id(analysis[[if (contract) "tfl_id" else "source_tfl_id"]], paste0(context, if (contract) ".tfl_id" else ".source_tfl_id")); standard_scalar_character(analysis$title, paste0(context, ".title")); standard_validate_dataset(analysis$dataset, execution_context, paste0(context, ".dataset"))
@@ -154,7 +261,8 @@ validate_standard_analysis_definition <- function(analysis, execution_context, c
     definition <- analysis$endpoint_definitions[[match(analysis$groups[[i]]$id, endpoint_ids)]]
     if (!standard_endpoint_predicate_matches(analysis$groups[[i]]$predicates, definition)) stop(context, ".groups[[", i, "]] endpoint predicate must exactly match its endpoint_definition selected_codes.")
   }
-  standard_scalar_sequence(analysis$fixed_effects, paste0(context, ".fixed_effects"), TRUE); fixed <- unlist(analysis$fixed_effects, use.names = FALSE); allowed_fixed <- c("treatment", "visit", "treatment_by_visit", "baseline", "baseline_by_visit"); if (!is.character(fixed) || !length(fixed) || any(!fixed %in% allowed_fixed) || anyDuplicated(fixed) || !all(c("visit", "baseline", "baseline_by_visit") %in% fixed)) stop(context, ".fixed_effects invalid.")
+  model_terms_norm <- standard_normalize_model_terms(analysis, derived_available, context); fixed <- model_terms_norm$core
+  if (!all(c("visit", "baseline", "baseline_by_visit") %in% fixed)) stop(context, ".model_terms must include visit, baseline and baseline*visit.")
   has_treatment <- "treatment" %in% names(analysis$mappings); has_treatment_block <- !is.null(analysis$treatment); if (!identical(has_treatment, has_treatment_block) || !identical(has_treatment, all(c("treatment", "treatment_by_visit") %in% fixed))) stop(context, " treatment mapping/block/effects inconsistent.")
   if (has_treatment) { t <- analysis$treatment; standard_assert_keys(t, c("variable", "levels", "reference", "comparator", "contrast_direction", "confidence_level", "multiplicity_adjustment"), character(), paste0(context, ".treatment")); if (!identical(t$variable, analysis$mappings$treatment)) stop(context, ".treatment.variable mismatch."); if (!is.character(t$levels) || length(t$levels) != 2L || anyDuplicated(t$levels) || !identical(t$levels, c(t$reference, t$comparator))) stop(context, ".treatment levels/reference/comparator invalid."); if (!identical(t$contrast_direction, "comparator_minus_reference") || !identical(as.numeric(t$confidence_level), 0.95) || !identical(t$multiplicity_adjustment, "none")) stop(context, ".treatment semantics unsupported.") }
   if (!identical(standard_scalar_logical(analysis$reml, paste0(context, ".reml")), TRUE)) stop(context, ".reml must be true for the standard MMRM profile.")

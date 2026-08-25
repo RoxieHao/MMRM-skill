@@ -97,7 +97,7 @@ scs_fixed_effect_reason <- function(effect) switch(
   baseline_by_visit = "批准的固定效应：允许 _baseline 的作用随访视变化。",
   treatment = "批准的固定效应：估计治疗组主效应。",
   treatment_by_visit = "批准的固定效应：估计治疗与访视交互，支持逐访视组间比较。",
-  stop("PROGRAM-SAS-RENDER-FIXED-EFFECT:", effect)
+  if (grepl("_by_", effect, fixed = TRUE)) paste0("批准的额外固定效应交互：", gsub("_by_", " \u00d7 ", effect, fixed = TRUE), "，逐字来自 analysis plan 的 model_terms。") else paste0("批准的额外固定效应协变量：", effect, "，逐字来自 analysis plan 的 model_terms。")
 )
 
 scs_mapping_reason <- function(name) switch(
@@ -776,6 +776,7 @@ scs_section_4 <- function(ir) {
     paste0("    _visit_label = strip(vvalue(", visit_label_variable, "));"),
     treatment_assignment,
     "    if missing(_subject) or missing(_response) or missing(_baseline) or missing(_visit_value) then _required_missing = 1;",
+    if (length(ir$model_render$covariate_variables)) paste0("    if missing(", ir$model_render$covariate_variables, ") then _required_missing = 1;") else NULL,
     "  run;",
     scs_blank(),
     scs_comment("  步骤 6：删除批准规则定义的必需变量缺失行，并记录删除数量。"),
@@ -894,8 +895,8 @@ scs_warning_rule_lines <- function() {
 
 scs_section_5 <- function(ir) {
   has_treatment <- !is.null(ir$treatment)
-  effects <- as.character(unlist(ir$fixed_effects, use.names = FALSE))
-  terms <- standard_sas_fixed_terms(list(fixed_effects = ir$fixed_effects))
+  effects <- ir$model_render$markers
+  terms <- ir$model_render$sas_terms
   effect_lines <- unlist(lapply(seq_along(effects), function(index) c(
     scs_marker_line("FIXED_EFFECT", effects[[index]]),
     scs_why_line("FIXED_EFFECT", effects[[index]], scs_fixed_effect_reason(effects[[index]]))
@@ -906,6 +907,7 @@ scs_section_5 <- function(ir) {
   )), use.names = FALSE)
   class_variables <- c("_subject", "_visit")
   if (has_treatment) class_variables <- c(class_variables, paste0("_treatment(ref=", standard_sas_quote(ir$treatment$reference), ")"))
+  if (length(ir$model_render$class_covariates)) class_variables <- c(class_variables, ir$model_render$class_covariates)
   alpha <- scs_alpha(ir)
   pairwise <- isTRUE(ir$estimands$pairwise_differences)
   treatment_lsmeans <- isTRUE(ir$estimands$treatment_visit_lsmeans)

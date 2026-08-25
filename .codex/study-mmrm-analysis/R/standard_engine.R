@@ -187,9 +187,10 @@ standard_prepare_analysis_data <- function(raw, analysis, project_dir) {
   population_filtered_rows <- nrow(filtered)
   filtered$.standard_source_row_id <- seq_len(nrow(filtered))
   mappings <- analysis$mappings
-  required_variables <- unique(unname(unlist(mappings, use.names = FALSE)))
+  model_covariates <- standard_normalize_model_terms(analysis)$covariate_variables
+  required_variables <- unique(c(unname(unlist(mappings, use.names = FALSE)), model_covariates))
   missing_columns <- setdiff(required_variables, names(filtered))
-  if (length(missing_columns)) stop("mapping variables missing: ", paste(missing_columns, collapse = ", "))
+  if (length(missing_columns)) stop("mapping/model variables missing: ", paste(missing_columns, collapse = ", "))
 
   endpoint_allocation_error <- function(...) stop("PLAN-ENDPOINT-ALLOCATION: ", paste0(..., collapse = ""))
   group_selections <- lapply(analysis$groups, function(group) {
@@ -232,7 +233,7 @@ standard_prepare_analysis_data <- function(raw, analysis, project_dir) {
     group <- selection$group
     group_data <- selection$data
     if (nrow(group_data) == 0L) return(NULL)
-    data.frame(
+    piece <- data.frame(
       subject = as.character(group_data[[mappings$subject]]),
       response = suppressWarnings(as.numeric(group_data[[mappings$response]])),
       baseline = suppressWarnings(as.numeric(group_data[[mappings$baseline]])),
@@ -244,11 +245,14 @@ standard_prepare_analysis_data <- function(raw, analysis, project_dir) {
       stringsAsFactors = FALSE,
       check.names = FALSE
     )
+    # 携带统计师声明的额外协变量（保持真实变量名，供 model_terms 渲染的 factor()/数值项使用）。
+    for (covariate in model_covariates) piece[[covariate]] <- group_data[[covariate]]
+    piece
   })
   pieces <- pieces[!vapply(pieces, is.null, logical(1))]
   if (length(pieces) == 0L) stop("approved filters/groups produced no data.")
   data <- do.call(rbind, pieces)
-  required_complete <- c("subject", "response", "baseline", "visit")
+  required_complete <- c("subject", "response", "baseline", "visit", model_covariates)
   if (!is.null(mappings$treatment)) required_complete <- c(required_complete, "treatment")
   complete <- stats::complete.cases(data[required_complete]) & nzchar(trimws(data$subject))
   if (!is.null(mappings$treatment)) complete <- complete & nzchar(trimws(data$treatment))
@@ -292,11 +296,7 @@ standard_covariance_term <- function(covariance) {
 }
 
 standard_fixed_formula <- function(analysis, covariance) {
-  fixed_map <- c(
-    visit = "visit_f", baseline = "baseline", baseline_by_visit = "baseline:visit_f",
-    treatment = "treatment_f", treatment_by_visit = "treatment_f:visit_f"
-  )
-  fixed <- unname(fixed_map[as.character(unlist(analysis$fixed_effects, use.names = FALSE))])
+  fixed <- standard_normalize_model_terms(analysis)$r_terms
   stats::as.formula(paste("response ~", paste(c(fixed, standard_covariance_term(covariance)), collapse = " + ")))
 }
 

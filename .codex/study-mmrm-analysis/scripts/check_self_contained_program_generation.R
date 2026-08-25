@@ -280,14 +280,14 @@ p7_plan_analysis <- function(analysis_id, tfl_id, evidence_id, binding_mode, sou
                                                           subscale = list(variable = "fixed", values = "sub1")),
                                         row_allocation_rule = "one_row_per_subject_endpoint_visit")))
   }
-  fixed_effects <- c("baseline", "visit", "baseline_by_visit")
-  if (treatment) fixed_effects <- c(fixed_effects, "treatment", "treatment_by_visit")
+  model_terms <- list(list(kind = "main_effect", role = "baseline"), list(kind = "main_effect", role = "visit"), list(kind = "interaction", of = list("baseline", "visit")))
+  if (treatment) model_terms <- c(model_terms, list(list(kind = "main_effect", role = "treatment"), list(kind = "interaction", of = list("treatment", "visit"))))
   dataset <- if (linked) {
     list(binding_mode = "linked", file = "scores.csv", format = "csv",
          relative_path = project_relative_path(source_path, project_dir), sha256 = file_sha256(source_path))
   } else list(binding_mode = "planned", file = "scores.csv", format = "csv", relative_path = NULL, sha256 = NULL)
   trace <- setNames(rep(list(list()), length(analysis_plan_trace_keys())), analysis_plan_trace_keys())
-  keys <- c("dataset", "mappings", "groups", "endpoint_definitions", "fixed_effects", "reml", "covariance", "df_method", "estimands")
+  keys <- c("dataset", "mappings", "groups", "endpoint_definitions", "model_terms", "reml", "covariance", "df_method", "estimands")
   if (derivations) keys <- c(keys, "derivations")
   if (filters) keys <- c(keys, "filters")
   if (treatment) keys <- c(keys, "treatment")
@@ -297,7 +297,7 @@ p7_plan_analysis <- function(analysis_id, tfl_id, evidence_id, binding_mode, sou
                    title = paste0("Phase 7 fixture ", analysis_id), dataset = dataset, adapter = adapter,
                    mappings = mappings, derivations = derivation_list, filters = filter_list,
                    groups = groups, endpoint_definitions = endpoints,
-                   fixed_effects = as.list(fixed_effects), reml = TRUE, covariance = covariance,
+                   model_terms = model_terms, reml = TRUE, covariance = covariance,
                    df_method = df_method,
                    estimands = list(visit_lsmeans = TRUE, treatment_visit_lsmeans = treatment,
                                     pairwise_differences = treatment && pairwise),
@@ -312,7 +312,7 @@ p7_plan_analysis <- function(analysis_id, tfl_id, evidence_id, binding_mode, sou
 
 p7_plan <- function(study_id, analyses) {
   linked <- any(vapply(analyses, function(x) identical(as.character(x$dataset$binding_mode), "linked"), logical(1)))
-  list(analysis_plan_schema_version = "2.1", study_id = study_id,
+  list(analysis_plan_schema_version = "2.2", study_id = study_id,
        execution_context = list(profile_version = standard_mmrm_profile_version(),
                                 data_availability = if (linked) "available" else "none",
                                 data_classification = if (linked) "dummy" else "none",

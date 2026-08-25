@@ -80,7 +80,7 @@ scr_fixed_effect_reason <- function(effect) switch(
   baseline_by_visit = "批准的固定效应：允许 baseline 的作用随访视变化。",
   treatment = "批准的固定效应：估计治疗组主效应。",
   treatment_by_visit = "批准的固定效应：估计治疗与访视交互，支持逐访视组间比较。",
-  stop("PROGRAM-R-RENDER-FIXED-EFFECT:", effect)
+  if (grepl("_by_", effect, fixed = TRUE)) paste0("批准的额外固定效应交互：", gsub("_by_", " \u00d7 ", effect, fixed = TRUE), "，逐字来自 analysis plan 的 model_terms。") else paste0("批准的额外固定效应协变量：", effect, "，逐字来自 analysis plan 的 model_terms。")
 )
 
 scr_covariance_reason <- function(covariance, position) {
@@ -453,8 +453,11 @@ scr_section_4 <- function(ir) {
     "TREATMENT_REFERENCE_LEVEL <- \"\"",
     "TREATMENT_COMPARATOR_LEVEL <- \"\""
   )
+  model_covariates <- ir$model_render$covariate_variables
+  covariate_frame_lines <- if (length(model_covariates)) vapply(model_covariates, function(v) paste0("    ", v, " = ", scr_column("group_data", v, "model_covariate"), ","), character(1)) else character()
   required_complete <- c("subject", "response", "baseline", "visit")
   if (has_treatment) required_complete <- c(required_complete, "treatment")
+  required_complete <- c(required_complete, model_covariates)
   c(
     render_r_section_header(4L, program_section_titles()[[4L]]),
     scr_comment("本部分严格按批准设计的 1-11 顺序执行数据处理与质量控制；任一硬性 QC 失败都在建模之前停止。"),
@@ -472,6 +475,7 @@ scr_section_4 <- function(ir) {
     paste0("    visit = as.character(", scr_column("group_data", mappings$visit, "mappings.visit"), "),"),
     paste0("    visit_label = as.character(", scr_column("group_data", visit_label_variable, "mappings.visit_label"), "),"),
     if (has_treatment) paste0("    treatment = as.character(", scr_column("group_data", mappings$treatment, "mappings.treatment"), "),") else "    treatment = rep(\"ALL\", nrow(group_data)),",
+    covariate_frame_lines,
     "    analysis_group_id = group_id,",
     "    analysis_group_label = group_label,",
     "    stringsAsFactors = FALSE, check.names = FALSE",
@@ -551,8 +555,8 @@ scr_section_4 <- function(ir) {
 }
 
 scr_section_5 <- function(ir) {
-  effects <- as.character(unlist(ir$fixed_effects, use.names = FALSE))
-  terms <- vapply(effects, scr_fixed_effect_term, character(1))
+  effects <- ir$model_render$markers
+  terms <- ir$model_render$r_terms
   effect_lines <- unlist(lapply(seq_along(effects), function(index) c(
     scr_marker_line("FIXED_EFFECT", effects[[index]]),
     scr_why_line("FIXED_EFFECT", effects[[index]], scr_fixed_effect_reason(effects[[index]]))
