@@ -51,13 +51,34 @@
 
 ## 项目验证
 
-在项目根目录运行：
+在项目根目录运行默认门禁：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate_project.ps1
 ```
 
-该检查只验证 general skill：Skill 格式、通用 R 语法、受控工作流模板、中文人读 diagnostics、单一 manifest、analysis-scoped artifacts、PNG-only figure、审批门禁和强制 `mmrm` engine。它不读取或修改旧 study/output fixture。
+该门禁验证 general skill：运行 skill 格式检查，解析全部通用 R helper 和脚本，检查受控工作流模板与关键契约，运行 finalization self-check、synthetic initializer/intake probes，以及 `R/tests/check_standard_profile.R`。解析全部 `check_*.R` 只代表语法有效，**不代表这些 focused checks 已全部执行**。默认门禁不读取或修改旧 study/output fixture。
+
+需要验证特定子系统时，使用 README 上方记录的 Rscript 路径，按需逐个运行：
+
+```powershell
+<Rscript.exe> --vanilla .codex/study-mmrm-analysis/scripts/check_intake_extraction.R
+<Rscript.exe> --vanilla .codex/study-mmrm-analysis/scripts/check_runtime_dataset_binding.R
+<Rscript.exe> --vanilla .codex/study-mmrm-analysis/scripts/check_analysis_plan.R
+<Rscript.exe> --vanilla .codex/study-mmrm-analysis/scripts/check_analysis_plan_compilation.R
+<Rscript.exe> --vanilla .codex/study-mmrm-analysis/scripts/check_analysis_plan_finalization.R
+<Rscript.exe> --vanilla .codex/study-mmrm-analysis/scripts/check_analysis_approval_generation.R
+<Rscript.exe> --vanilla .codex/study-mmrm-analysis/scripts/check_program_generation_ir.R
+<Rscript.exe> --vanilla .codex/study-mmrm-analysis/scripts/check_self_contained_r_generation.R
+<Rscript.exe> --vanilla .codex/study-mmrm-analysis/scripts/check_self_contained_sas_generation.R
+<Rscript.exe> --vanilla .codex/study-mmrm-analysis/scripts/check_self_contained_program_generation.R
+```
+
+补充说明：
+
+- `check_dependencies.R` 会安装缺失的 R package，不属于只读检查，因此不列入默认门禁。
+- SAS focused check 只进行静态、conformance 和 golden 校验，不执行 SAS。
+- self-contained R/program generation checks 可能真实运行 synthetic R 分析；依赖不足时，部分执行断言会明确跳过。
 
 大型 source datasets、生成输出和临时提取文件通过 `.gitignore` 排除；本地历史文件不会被自动删除。
 
