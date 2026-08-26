@@ -1,0 +1,118 @@
+2026-08-26 10:32:56 | collector start; mode=run-and-collect; profile=standard-mmrm-profile/v1
+2026-08-26 10:32:56 | collector never executes SAS; SAS programs are code deliverables imported through their own run record only.
+2026-08-26 10:32:56 | program order (normalized R filename ascending): MMRM-01.R, MMRM-02.R, MMRM-03.R, MMRM-04.R, MMRM-05.R
+2026-08-26 10:32:57 | MMRM-01.R analysis=MMRM-01 binding_mode=linked; invoke Rscript; input_dir=studies/fcn_159_002_luna/input/adam; output_dir=studies/fcn_159_002_luna/output/analyses/MMRM-01
+    | mmrm() registered as emmeans extension
+    | 输入文件 SHA-256 校验通过：1BB5929DEAB16C36C1AE3872D6552E60C447E8336DDFD5FFF9CCA04C3B925ACE
+    | 已读取输入数据，行数=5276
+    | 删除必需变量缺失行数=628
+    | 数据处理计数：输入=5276，筛选后=5245，分析=1677，缺失删除=628
+    | 批准协方差 UN 对应 formula：response ~ visit_f + baseline + baseline:visit_f + us(visit_f | subject_f)
+    | 批准协方差 AR1 对应 formula：response ~ visit_f + baseline + baseline:visit_f + ar1(visit_f | subject_f)
+    | REML=TRUE；自由度方法=Kenward-Roger
+    | 分组 PEDSQL_SUBJECT_TOTAL 尝试协方差 UN：success
+    | 分组 PEDSQL_PARENT_TOTAL 尝试协方差 UN：success
+    | 分组 PEDSQL_SUBJECT_PHYSICAL 尝试协方差 UN：success
+    | 分组 PEDSQL_PARENT_PHYSICAL 尝试协方差 UN：success
+    | 分组 PEDSQL_SUBJECT_EMOTIONAL 尝试协方差 UN：success
+    | 分组 PEDSQL_PARENT_EMOTIONAL 尝试协方差 UN：success
+    | 分组 PEDSQL_SUBJECT_SOCIAL 尝试协方差 UN：success
+    | 分组 PEDSQL_PARENT_SOCIAL 尝试协方差 UN：success
+    | 分组 PEDSQL_SUBJECT_SCHOOL 尝试协方差 UN：success
+    | 分组 PEDSQL_PARENT_SCHOOL 尝试协方差 UN：success
+    | NOTE: Results may be misleading due to involvement in interactions
+    | NOTE: Results may be misleading due to involvement in interactions
+    | NOTE: Results may be misleading due to involvement in interactions
+    | NOTE: Results may be misleading due to involvement in interactions
+    | NOTE: Results may be misleading due to involvement in interactions
+    | NOTE: Results may be misleading due to involvement in interactions
+    | NOTE: Results may be misleading due to involvement in interactions
+    | NOTE: Results may be misleading due to involvement in interactions
+    | NOTE: Results may be misleading due to involvement in interactions
+    | NOTE: Results may be misleading due to involvement in interactions
+    | 推断字段完整性=TRUE
+    | 已写出 raw 与 final TFL：C:/Users/haoruoxi/Desktop/MMRM/studies/fcn_159_002_luna/output/analyses/MMRM-01/T14-2-10-1-2_r_raw.csv / C:/Users/haoruoxi/Desktop/MMRM/studies/fcn_159_002_luna/output/analyses/MMRM-01/T14-2-10-1-2_r_final.csv
+    | 协方差尝试路径：PEDSQL_SUBJECT_TOTAL/UN=success | PEDSQL_PARENT_TOTAL/UN=success | PEDSQL_SUBJECT_PHYSICAL/UN=success | PEDSQL_PARENT_PHYSICAL/UN=success | PEDSQL_SUBJECT_EMOTIONAL/UN=success | PEDSQL_PARENT_EMOTIONAL/UN=success | PEDSQL_SUBJECT_SOCIAL/UN=success | PEDSQL_PARENT_SOCIAL/UN=success | PEDSQL_SUBJECT_SCHOOL/UN=success | PEDSQL_PARENT_SCHOOL/UN=success
+    | 运行状态=complete；计算风险=Green
+2026-08-26 10:33:08 | MMRM-01.R analysis=MMRM-01 exit=0
+2026-08-26 10:33:08 |   manifest row analysis=MMRM-01 language=R execution_status=executed
+2026-08-26 10:33:08 |   manifest row analysis=MMRM-01 language=SAS execution_status=program_generated_not_executed
+2026-08-26 10:33:08 | MMRM-02.R analysis=MMRM-02 binding_mode=linked; invoke Rscript; input_dir=studies/fcn_159_002_luna/input/adam; output_dir=studies/fcn_159_002_luna/output/analyses/MMRM-02
+    | mmrm() registered as emmeans extension
+    | 输入文件 SHA-256 校验通过：1BB5929DEAB16C36C1AE3872D6552E60C447E8336DDFD5FFF9CCA04C3B925ACE
+    | 已读取输入数据，行数=5276
+    | 删除必需变量缺失行数=92
+    | 数据处理计数：输入=5276，筛选后=5245，分析=524，缺失删除=92
+    | 批准协方差 UN 对应 formula：response ~ visit_f + baseline + baseline:visit_f + us(visit_f | subject_f)
+    | 批准协方差 AR1 对应 formula：response ~ visit_f + baseline + baseline:visit_f + ar1(visit_f | subject_f)
+    | REML=TRUE；自由度方法=Kenward-Roger
+    | 分组 OVERPW 尝试协方差 UN：success
+    | 分组 OVERTPW 尝试协方差 UN：success
+    | NOTE: Results may be misleading due to involvement in interactions
+    | NOTE: Results may be misleading due to involvement in interactions
+    | 推断字段完整性=TRUE
+    | 已写出 raw 与 final TFL：C:/Users/haoruoxi/Desktop/MMRM/studies/fcn_159_002_luna/output/analyses/MMRM-02/T14-2-11-2_r_raw.csv / C:/Users/haoruoxi/Desktop/MMRM/studies/fcn_159_002_luna/output/analyses/MMRM-02/T14-2-11-2_r_final.csv
+    | 协方差尝试路径：OVERPW/UN=success | OVERTPW/UN=success
+    | 运行状态=complete；计算风险=Green
+2026-08-26 10:33:10 | MMRM-02.R analysis=MMRM-02 exit=0
+2026-08-26 10:33:11 |   manifest row analysis=MMRM-02 language=R execution_status=executed
+2026-08-26 10:33:11 |   manifest row analysis=MMRM-02 language=SAS execution_status=program_generated_not_executed
+2026-08-26 10:33:11 | MMRM-03.R analysis=MMRM-03 binding_mode=linked; invoke Rscript; input_dir=studies/fcn_159_002_luna/input/adam; output_dir=studies/fcn_159_002_luna/output/analyses/MMRM-03
+    | mmrm() registered as emmeans extension
+    | 输入文件 SHA-256 校验通过：1BB5929DEAB16C36C1AE3872D6552E60C447E8336DDFD5FFF9CCA04C3B925ACE
+    | 已读取输入数据，行数=5276
+    | 删除必需变量缺失行数=98
+    | 数据处理计数：输入=5276，筛选后=5245，分析=452，缺失删除=98
+    | 批准协方差 UN 对应 formula：response ~ visit_f + baseline + baseline:visit_f + us(visit_f | subject_f)
+    | 批准协方差 AR1 对应 formula：response ~ visit_f + baseline + baseline:visit_f + ar1(visit_f | subject_f)
+    | REML=TRUE；自由度方法=Kenward-Roger
+    | 分组 PAINTE 尝试协方差 UN：success
+    | 分组 PAINPR 尝试协方差 UN：success
+    | NOTE: Results may be misleading due to involvement in interactions
+    | NOTE: Results may be misleading due to involvement in interactions
+    | 推断字段完整性=TRUE
+    | 已写出 raw 与 final TFL：C:/Users/haoruoxi/Desktop/MMRM/studies/fcn_159_002_luna/output/analyses/MMRM-03/T14-2-12-1-2_r_raw.csv / C:/Users/haoruoxi/Desktop/MMRM/studies/fcn_159_002_luna/output/analyses/MMRM-03/T14-2-12-1-2_r_final.csv
+    | 协方差尝试路径：PAINTE/UN=success | PAINPR/UN=success
+    | 运行状态=complete；计算风险=Green
+2026-08-26 10:33:13 | MMRM-03.R analysis=MMRM-03 exit=0
+2026-08-26 10:33:13 |   manifest row analysis=MMRM-03 language=R execution_status=executed
+2026-08-26 10:33:13 |   manifest row analysis=MMRM-03 language=SAS execution_status=program_generated_not_executed
+2026-08-26 10:33:14 | MMRM-04.R analysis=MMRM-04 binding_mode=linked; invoke Rscript; input_dir=studies/fcn_159_002_luna/input/adam; output_dir=studies/fcn_159_002_luna/output/analyses/MMRM-04
+    | mmrm() registered as emmeans extension
+    | 输入文件 SHA-256 校验通过：FD7577DA53D2C129B3C6A3B2DD41387FD05F9A9824601023C9D16FB4C357708D
+    | 已读取输入数据，行数=2936
+    | 删除必需变量缺失行数=13
+    | 数据处理计数：输入=2936，筛选后=164，分析=20，缺失删除=13
+    | 批准协方差 UN 对应 formula：response ~ visit_f + baseline + baseline:visit_f + us(visit_f | subject_f)
+    | 批准协方差 AR1 对应 formula：response ~ visit_f + baseline + baseline:visit_f + ar1(visit_f | subject_f)
+    | REML=TRUE；自由度方法=Kenward-Roger
+    | 分组 KENDTEN 尝试协方差 UN：failed
+    | 分组 KENDTEN 尝试协方差 AR1：failed
+    | 分组 KENDTEN 的全部批准协方差结构均未成功，按设计不生成完整状态的 TFL。
+    | 推断字段完整性=FALSE
+    | 模型或推断未满足批准的完整性条件，按设计不写出 raw 与 final TFL。
+    | 协方差尝试路径：KENDTEN/UN=failed | KENDTEN/AR1=failed
+    | 运行状态=fit_failed；计算风险=Red
+    | Error: 本次运行未产生完整的正式 TFL，运行状态=fit_failed。请阅读诊断文件后处理。
+    | Execution halted
+2026-08-26 10:33:16 | MMRM-04.R analysis=MMRM-04 exit=1
+2026-08-26 10:33:16 |   manifest row analysis=MMRM-04 language=R execution_status=failed
+2026-08-26 10:33:16 |   manifest row analysis=MMRM-04 language=SAS execution_status=program_generated_not_executed
+2026-08-26 10:33:16 | MMRM-05.R analysis=MMRM-05 binding_mode=linked; invoke Rscript; input_dir=studies/fcn_159_002_luna/input/adam; output_dir=studies/fcn_159_002_luna/output/analyses/MMRM-05
+    | mmrm() registered as emmeans extension
+    | 输入文件 SHA-256 校验通过：FD7577DA53D2C129B3C6A3B2DD41387FD05F9A9824601023C9D16FB4C357708D
+    | 已读取输入数据，行数=2936
+    | 删除必需变量缺失行数=25
+    | 数据处理计数：输入=2936，筛选后=164，分析=106，缺失删除=25
+    | 批准协方差 UN 对应 formula：response ~ visit_f + baseline + baseline:visit_f + us(visit_f | subject_f)
+    | 批准协方差 AR1 对应 formula：response ~ visit_f + baseline + baseline:visit_f + ar1(visit_f | subject_f)
+    | REML=TRUE；自由度方法=Kenward-Roger
+    | 分组 SUMALL 尝试协方差 UN：failed
+    | 分组 SUMALL 尝试协方差 AR1：success
+    | Error: 分组 SUMNECK 的 subject 或 visit 水平不足，无法拟合 MMRM。
+    | Execution halted
+2026-08-26 10:33:18 | MMRM-05.R analysis=MMRM-05 exit=1
+2026-08-26 10:33:18 |   manifest row analysis=MMRM-05 language=R execution_status=blocked
+2026-08-26 10:33:18 |   manifest row analysis=MMRM-05 language=SAS execution_status=program_generated_not_executed
+2026-08-26 10:33:19 | manifest written: studies/fcn_159_002_luna/output/tfl-output-manifest.csv
+2026-08-26 10:33:19 | collector finished; blocked_or_failed=MMRM-04, MMRM-05

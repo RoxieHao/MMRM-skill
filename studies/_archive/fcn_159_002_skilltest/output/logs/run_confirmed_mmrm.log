@@ -1,0 +1,77 @@
+2026-08-12 14:01:26 | 开始运行 FCN-159-002 已确认 MMRM TFL。
+2026-08-12 14:01:27 | 读取 ADaM 数据集：adqssum
+2026-08-12 14:01:27 | 14.2.10.1.2：未找到 REGION，使用 COUNTRY 作为可估计性检查候选；若正式规则不同需统计师确认。
+2026-08-12 14:01:27 | 14.2.10.1.2：PedsQL 按报告者和分量表合并年龄版本后建模；不再按 TS1/TS2/PF1/PF2 等单个 PARAMCD 分别建模。
+2026-08-12 14:01:28 | 14.2.10.1.2 / 受试者报告__总分：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:28 | 14.2.10.1.2 / 受试者报告__总分：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:29 | 14.2.10.1.2 / 受试者报告__生理功能：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:30 | 14.2.10.1.2 / 受试者报告__生理功能：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:30 | 14.2.10.1.2 / 受试者报告__情感功能：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:30 | 14.2.10.1.2 / 受试者报告__情感功能：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:31 | 14.2.10.1.2 / 受试者报告__社交功能：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:32 | 14.2.10.1.2 / 受试者报告__社交功能：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:32 | 14.2.10.1.2 / 受试者报告__学校表现：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:33 | 14.2.10.1.2 / 受试者报告__学校表现：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:33 | 14.2.10.1.2 / 家长报告__总分：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:34 | 14.2.10.1.2 / 家长报告__总分：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:34 | 14.2.10.1.2 / 家长报告__生理功能：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:34 | 14.2.10.1.2 / 家长报告__生理功能：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:35 | 14.2.10.1.2 / 家长报告__情感功能：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:36 | 14.2.10.1.2 / 家长报告__情感功能：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:36 | 14.2.10.1.2 / 家长报告__社交功能：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:37 | 14.2.10.1.2 / 家长报告__社交功能：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:37 | 14.2.10.1.2 / 家长报告__学校表现：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:39 | 14.2.10.1.2 / 家长报告__学校表现：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:41 | 14.2.11.2：未找到 REGION，使用 COUNTRY 作为可估计性检查候选；若正式规则不同需统计师确认。
+2026-08-12 14:01:41 | 14.2.11.2 / OVERPW：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:42 | 14.2.11.2 / OVERPW：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:43 | 14.2.11.2 / OVERTPW：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:44 | 14.2.11.2 / OVERTPW：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:45 | 14.2.12.1.2：未找到 REGION，使用 COUNTRY 作为可估计性检查候选；若正式规则不同需统计师确认。
+2026-08-12 14:01:45 | 14.2.12.1.2 / PAINTE：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:47 | 14.2.12.1.2 / PAINTE：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:47 | 14.2.12.1.2 / PAINPR：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:48 | 14.2.12.1.2 / PAINPR：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:50 | 读取 ADaM 数据集：admk
+2026-08-12 14:01:50 | 14.2.13.1.2：未找到 REGION，使用 COUNTRY 作为可估计性检查候选；若正式规则不同需统计师确认。
+2026-08-12 14:01:50 | 14.2.13.1.2 / KENDTEN：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:50 | 14.2.13.1.2 / KENDTEN：UN 拟合 warning：Divergence with optimizer L-BFGS-B due to problems: L-BFGS-B needs finite values of 'fn'
+2026-08-12 14:01:51 | 14.2.13.1.2 / KENDTEN：UN 拟合失败，尝试 AR(1)。原始错误：No optimizer led to a successful model fit. Please try to use a different covariance structure or other covariates.
+2026-08-12 14:01:51 | 14.2.14.1.2：未找到 REGION，使用 COUNTRY 作为可估计性检查候选；若正式规则不同需统计师确认。
+2026-08-12 14:01:51 | 14.2.14.1.2 / SUMALL：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:52 | 14.2.14.1.2 / SUMALL：UN 拟合失败，尝试 AR(1)。原始错误：No optimizer led to a successful model fit. Please try to use a different covariance structure or other covariates.
+2026-08-12 14:01:53 | 14.2.14.1.2 / SUMALL：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:53 | 14.2.14.1.2 / SUMHIP：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:53 | 14.2.14.1.2 / SUMHIP：UN 拟合 message：In AVISITN_F there are dropped visits: 2021, 2025.
+ Additional attributes including contrasts are lost.
+To avoid this behavior, make sure use `drop_visit_levels = FALSE`.
+
+2026-08-12 14:01:53 | 14.2.14.1.2 / SUMHIP：UN 拟合失败，尝试 AR(1)。原始错误：No optimizer led to a successful model fit. Please try to use a different covariance structure or other covariates.
+2026-08-12 14:01:53 | 14.2.14.1.2 / SUMHIP：AR(1) 拟合 message：In AVISITN_F there are dropped visits: 2021, 2025.
+ Additional attributes including contrasts are lost.
+To avoid this behavior, make sure use `drop_visit_levels = FALSE`.
+
+2026-08-12 14:01:53 | 14.2.14.1.2 / SUMELBOW：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:54 | 14.2.14.1.2 / SUMELBOW：UN 拟合失败，尝试 AR(1)。原始错误：No optimizer led to a successful model fit. Please try to use a different covariance structure or other covariates.
+2026-08-12 14:01:54 | 14.2.14.1.2 / SUMWRIST：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:54 | 14.2.14.1.2 / SUMWRIST：UN 拟合失败，尝试 AR(1)。原始错误：No optimizer led to a successful model fit. Please try to use a different covariance structure or other covariates.
+2026-08-12 14:01:54 | 14.2.14.1.2 / SUMANKLE：REGION 不可估计或只有一个水平，本次运行移除 REGION 项并保留日志。
+2026-08-12 14:01:55 | 14.2.14.1.2 / SUMANKLE：UN 拟合失败，尝试 AR(1)。原始错误：No optimizer led to a successful model fit. Please try to use a different covariance structure or other covariates.
+2026-08-12 14:01:56 | 14.2.14.1.2 / SUMANKLE：LSMean 提取 message：NOTE: Results may be misleading due to involvement in interactions
+
+2026-08-12 14:01:57 | 运行结束。

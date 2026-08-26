@@ -1,0 +1,2 @@
+﻿"input_type","file_name","relative_path","version","file_size_bytes","modified_at","sha256","status","note","extraction_status","extraction_format","extractor_id","extractor_version","extracted_at_utc","extraction_note"
+"statistician_briefing","statistician-analysis-input.md","input/statistician-analysis-input.md","current",24585,"2026-08-26T05:11:15Z","526F15293FA57D247C8339765ED5061C197423BC512B0734055D2946FC3D4C12","registered_input","auto_registered_by_generate_intake_review","not_required","md","native","","","文本文件，直接扫描无需二进制抽取。"

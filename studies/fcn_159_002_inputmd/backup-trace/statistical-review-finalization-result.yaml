@@ -1,0 +1,19 @@
+result_schema_version: '2.1'
+generated_at_utc: '2026-08-26T05:42:52Z'
+source_review: C:/Users/haoruoxi/Desktop/MMRM/studies/fcn_159_002_inputmd/statistician-review/statistical-review.md
+target_review: C:/Users/haoruoxi/Desktop/MMRM/studies/fcn_159_002_inputmd/statistician-review/statistical-review.md
+published: no
+approved: no
+analysis_count: 0
+issue_count: 1
+report: 'Finalization refused: review_status is not ready_for_compilation; nothing
+  was changed.'
+issues:
+- issue_id: PLAN-SCHEMA-REVIEW-STATUS
+  scope: ALL
+  field: review_status
+  observed: pending
+  requirement: ready_for_compilation
+  resolution: Run Compile Analysis Plan to produce analysis-plan.candidate.yaml and
+    set review_status=ready_for_compilation before finalization.
+  status: unresolved

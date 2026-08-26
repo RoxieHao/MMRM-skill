@@ -1,0 +1,6 @@
+tfl_id,tfl_type,title,mmrm_role,scope_status,source_trace,statistician_comment
+14.2.10.1.2,table,PedsQL生活质量量表观测值及相对基线变化-MMRM-汇总（COA分析集）,direct MMRM output,approved,shell:fcn_table_template.txt lines 66-67 and 1063-1114,由本轮 tfl-solutions.csv 统计师 comment 确认进入后续 R code 阶段
+14.2.11.2,table,疼痛强度观测值及相对基线变化-MMRM-汇总（COA分析集）,direct MMRM output,approved,shell:fcn_table_template.txt lines 69-70 and 1138-1152,由本轮 tfl-solutions.csv 统计师 comment 确认进入后续 R code 阶段
+14.2.12.1.2,table,疼痛干扰观测值及相对基线变化-MMRM-汇总（COA分析集）,direct MMRM output,approved,shell:fcn_table_template.txt lines 76-77 and 1216-1231,由本轮 tfl-solutions.csv 统计师 comment 确认进入后续 R code 阶段
+14.2.13.1.2,table,肌力评估观测值及相对基线变化-MMRM-汇总（COA分析集）,direct MMRM output,approved,shell:fcn_table_template.txt lines 79-80 and 1243-1247,由本轮 tfl-solutions.csv 统计师 comment 确认进入后续 R code 阶段
+14.2.14.1.2,table,关节活动范围评估观测值及相对基线变化-MMRM-汇总（COA分析集）,direct MMRM output,approved,shell:fcn_table_template.txt lines 82-83 and 1262-1265,由本轮 tfl-solutions.csv 统计师 comment 确认进入后续 R code 阶段
