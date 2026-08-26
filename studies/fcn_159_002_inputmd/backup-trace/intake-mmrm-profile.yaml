@@ -1,0 +1,14 @@
+profile_schema_version: '1.1'
+study_id: fcn_159_002_inputmd
+dataset_count: 0
+datasets: []
+specification:
+  has_specification: no
+  source_files: []
+  datasets: []
+  parameters: []
+  codelists: []
+alignment:
+  datasets: []
+  datasets_runtime_only: []
+  datasets_spec_only: []

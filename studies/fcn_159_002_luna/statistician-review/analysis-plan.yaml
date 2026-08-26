@@ -1,0 +1,473 @@
+analysis_plan_schema_version: '2.2'
+study_id: fcn_159_002_luna
+execution_context:
+  profile_version: standard-mmrm-profile/v1
+  data_availability: available
+  data_classification: production
+  intended_use: formal_analysis
+  sas_execution_profile: sas-9.4m5-self-contained/v1
+analyses:
+- analysis_id: MMRM-01
+  source_tfl_id: T14-2-10-1-2
+  title: PedsQL生活质量量表观测值及相对基线变化-MMRM-汇总（COA分析集）
+  dataset:
+    binding_mode: linked
+    file: adqssum.sas7bdat
+    format: sas7bdat
+    relative_path: studies/fcn_159_002_luna/input/adam/adqssum.sas7bdat
+    sha256: 1BB5929DEAB16C36C1AE3872D6552E60C447E8336DDFD5FFF9CCA04C3B925ACE
+  adapter: null
+  mappings:
+    subject: USUBJID
+    response: CHG
+    baseline: BASE
+    visit: AVISITN
+  derivations: []
+  filters:
+  - variable: COAFL
+    operator: eq
+    value: 是
+  - variable: ANL01FL
+    operator: eq
+    value: '是'
+  groups:
+  - id: PEDSQL_SUBJECT_TOTAL
+    label: 受试者报告总分
+    predicates:
+    - variable: PARAMCD
+      operator: in
+      value: [TS1, TS2]
+  - id: PEDSQL_PARENT_TOTAL
+    label: 家长报告总分
+    predicates:
+    - variable: PARAMCD
+      operator: in
+      value: [TS3, TS4, TS5, TS6]
+  - id: PEDSQL_SUBJECT_PHYSICAL
+    label: 受试者报告生理功能
+    predicates:
+    - variable: PARAMCD
+      operator: in
+      value: [PF1, PF2]
+  - id: PEDSQL_PARENT_PHYSICAL
+    label: 家长报告生理功能
+    predicates:
+    - variable: PARAMCD
+      operator: in
+      value: [PF3, PF4, PF5, PF6]
+  - id: PEDSQL_SUBJECT_EMOTIONAL
+    label: 受试者报告情感功能
+    predicates:
+    - variable: PARAMCD
+      operator: in
+      value: [EF1, EF2]
+  - id: PEDSQL_PARENT_EMOTIONAL
+    label: 家长报告情感功能
+    predicates:
+    - variable: PARAMCD
+      operator: in
+      value: [EF3, EF4, EF5, EF6]
+  - id: PEDSQL_SUBJECT_SOCIAL
+    label: 受试者报告社交功能
+    predicates:
+    - variable: PARAMCD
+      operator: in
+      value: [SOF1, SOF2]
+  - id: PEDSQL_PARENT_SOCIAL
+    label: 家长报告社交功能
+    predicates:
+    - variable: PARAMCD
+      operator: in
+      value: [SOF3, SOF4, SOF5, SOF6]
+  - id: PEDSQL_SUBJECT_SCHOOL
+    label: 受试者报告学校表现
+    predicates:
+    - variable: PARAMCD
+      operator: in
+      value: [SCF1, SCF2]
+  - id: PEDSQL_PARENT_SCHOOL
+    label: 家长报告学校表现
+    predicates:
+    - variable: PARAMCD
+      operator: in
+      value: [SCF3, SCF4, SCF5, SCF6]
+  endpoint_definitions:
+  - group_id: PEDSQL_SUBJECT_TOTAL
+    endpoint_variable: PARAMCD
+    selected_codes: [TS1, TS2]
+    selection_mode: mutually_exclusive_versions
+    dimensions:
+      instrument: {variable: fixed, values: [PedsQL生活质量量表]}
+      version: {variable: not_applicable, values: []}
+      reporter: {variable: fixed, values: [受试者]}
+      subscale: {variable: fixed, values: [总分]}
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  - group_id: PEDSQL_PARENT_TOTAL
+    endpoint_variable: PARAMCD
+    selected_codes: [TS3, TS4, TS5, TS6]
+    selection_mode: mutually_exclusive_versions
+    dimensions:
+      instrument: {variable: fixed, values: [PedsQL生活质量量表]}
+      version: {variable: not_applicable, values: []}
+      reporter: {variable: fixed, values: [家长]}
+      subscale: {variable: fixed, values: [总分]}
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  - group_id: PEDSQL_SUBJECT_PHYSICAL
+    endpoint_variable: PARAMCD
+    selected_codes: [PF1, PF2]
+    selection_mode: mutually_exclusive_versions
+    dimensions:
+      instrument: {variable: fixed, values: [PedsQL生活质量量表]}
+      version: {variable: not_applicable, values: []}
+      reporter: {variable: fixed, values: [受试者]}
+      subscale: {variable: fixed, values: [生理功能]}
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  - group_id: PEDSQL_PARENT_PHYSICAL
+    endpoint_variable: PARAMCD
+    selected_codes: [PF3, PF4, PF5, PF6]
+    selection_mode: mutually_exclusive_versions
+    dimensions:
+      instrument: {variable: fixed, values: [PedsQL生活质量量表]}
+      version: {variable: not_applicable, values: []}
+      reporter: {variable: fixed, values: [家长]}
+      subscale: {variable: fixed, values: [生理功能]}
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  - group_id: PEDSQL_SUBJECT_EMOTIONAL
+    endpoint_variable: PARAMCD
+    selected_codes: [EF1, EF2]
+    selection_mode: mutually_exclusive_versions
+    dimensions:
+      instrument: {variable: fixed, values: [PedsQL生活质量量表]}
+      version: {variable: not_applicable, values: []}
+      reporter: {variable: fixed, values: [受试者]}
+      subscale: {variable: fixed, values: [情感功能]}
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  - group_id: PEDSQL_PARENT_EMOTIONAL
+    endpoint_variable: PARAMCD
+    selected_codes: [EF3, EF4, EF5, EF6]
+    selection_mode: mutually_exclusive_versions
+    dimensions:
+      instrument: {variable: fixed, values: [PedsQL生活质量量表]}
+      version: {variable: not_applicable, values: []}
+      reporter: {variable: fixed, values: [家长]}
+      subscale: {variable: fixed, values: [情感功能]}
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  - group_id: PEDSQL_SUBJECT_SOCIAL
+    endpoint_variable: PARAMCD
+    selected_codes: [SOF1, SOF2]
+    selection_mode: mutually_exclusive_versions
+    dimensions:
+      instrument: {variable: fixed, values: [PedsQL生活质量量表]}
+      version: {variable: not_applicable, values: []}
+      reporter: {variable: fixed, values: [受试者]}
+      subscale: {variable: fixed, values: [社交功能]}
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  - group_id: PEDSQL_PARENT_SOCIAL
+    endpoint_variable: PARAMCD
+    selected_codes: [SOF3, SOF4, SOF5, SOF6]
+    selection_mode: mutually_exclusive_versions
+    dimensions:
+      instrument: {variable: fixed, values: [PedsQL生活质量量表]}
+      version: {variable: not_applicable, values: []}
+      reporter: {variable: fixed, values: [家长]}
+      subscale: {variable: fixed, values: [社交功能]}
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  - group_id: PEDSQL_SUBJECT_SCHOOL
+    endpoint_variable: PARAMCD
+    selected_codes: [SCF1, SCF2]
+    selection_mode: mutually_exclusive_versions
+    dimensions:
+      instrument: {variable: fixed, values: [PedsQL生活质量量表]}
+      version: {variable: not_applicable, values: []}
+      reporter: {variable: fixed, values: [受试者]}
+      subscale: {variable: fixed, values: [学校表现]}
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  - group_id: PEDSQL_PARENT_SCHOOL
+    endpoint_variable: PARAMCD
+    selected_codes: [SCF3, SCF4, SCF5, SCF6]
+    selection_mode: mutually_exclusive_versions
+    dimensions:
+      instrument: {variable: fixed, values: [PedsQL生活质量量表]}
+      version: {variable: not_applicable, values: []}
+      reporter: {variable: fixed, values: [家长]}
+      subscale: {variable: fixed, values: [学校表现]}
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  model_terms:
+  - {kind: main_effect, role: visit}
+  - {kind: main_effect, role: baseline}
+  - kind: interaction
+    of: [baseline, visit]
+  reml: true
+  covariance:
+    primary: UN
+    fallback: [AR1]
+  df_method: Kenward-Roger
+  estimands:
+    visit_lsmeans: true
+    treatment_visit_lsmeans: false
+    pairwise_differences: false
+  treatment: null
+  trace:
+    dataset: ['14.2.10.1.2/分析数据集']
+    adapter: []
+    mappings: ['14.2.10.1.2/响应与基线', '14.2.10.1.2/访视与窗口']
+    derivations: []
+    filters: ['14.2.10.1.2/分析人群', '14.2.10.1.2/重复记录与行分配']
+    groups: ['14.2.10.1.2/终点变量与取值', '14.2.10.1.2/终点维度']
+    endpoint_definitions: ['14.2.10.1.2/终点变量与取值', '14.2.10.1.2/终点维度']
+    model_terms: ['14.2.10.1.2/固定效应']
+    reml: ['14.2.10.1.2/协方差与自由度']
+    covariance: ['14.2.10.1.2/协方差与自由度']
+    df_method: ['14.2.10.1.2/协方差与自由度']
+    estimands: ['14.2.10.1.2/估计量与输出']
+    treatment: []
+- analysis_id: MMRM-02
+  source_tfl_id: T14-2-11-2
+  title: 疼痛强度观测值及相对基线变化-MMRM-汇总（COA分析集）
+  dataset:
+    binding_mode: linked
+    file: adqssum.sas7bdat
+    format: sas7bdat
+    relative_path: studies/fcn_159_002_luna/input/adam/adqssum.sas7bdat
+    sha256: 1BB5929DEAB16C36C1AE3872D6552E60C447E8336DDFD5FFF9CCA04C3B925ACE
+  adapter: null
+  mappings: {subject: USUBJID, response: CHG, baseline: BASE, visit: AVISITN}
+  derivations: []
+  filters:
+  - {variable: COAFL, operator: eq, value: 是}
+  - {variable: ANL01FL, operator: eq, value: '是'}
+  groups:
+  - id: OVERPW
+    label: OVERPW
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: OVERPW}
+  - id: OVERTPW
+    label: OVERTPW
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: OVERTPW}
+  endpoint_definitions:
+  - group_id: OVERPW
+    endpoint_variable: PARAMCD
+    selected_codes: [OVERPW]
+    selection_mode: single_code
+    dimensions: &no_dimensions
+      instrument: {variable: not_applicable, values: []}
+      version: {variable: not_applicable, values: []}
+      reporter: {variable: not_applicable, values: []}
+      subscale: {variable: not_applicable, values: []}
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  - group_id: OVERTPW
+    endpoint_variable: PARAMCD
+    selected_codes: [OVERTPW]
+    selection_mode: single_code
+    dimensions: *no_dimensions
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  model_terms: &core_model
+  - {kind: main_effect, role: visit}
+  - {kind: main_effect, role: baseline}
+  - {kind: interaction, of: [baseline, visit]}
+  reml: true
+  covariance: &covariance
+    primary: UN
+    fallback: [AR1]
+  df_method: Kenward-Roger
+  estimands: &single_arm_estimands
+    visit_lsmeans: true
+    treatment_visit_lsmeans: false
+    pairwise_differences: false
+  treatment: null
+  trace:
+    dataset: ['14.2.11.2/分析数据集']
+    adapter: []
+    mappings: ['14.2.11.2/响应与基线', '14.2.11.2/访视与窗口']
+    derivations: []
+    filters: ['14.2.11.2/分析人群', '14.2.11.2/重复记录与行分配']
+    groups: ['14.2.11.2/终点变量与取值', '14.2.11.2/终点维度']
+    endpoint_definitions: ['14.2.11.2/终点变量与取值', '14.2.11.2/终点维度']
+    model_terms: ['14.2.11.2/固定效应']
+    reml: ['14.2.11.2/协方差与自由度']
+    covariance: ['14.2.11.2/协方差与自由度']
+    df_method: ['14.2.11.2/协方差与自由度']
+    estimands: ['14.2.11.2/估计量与输出']
+    treatment: []
+- analysis_id: MMRM-03
+  source_tfl_id: T14-2-12-1-2
+  title: 疼痛干扰观测值及相对基线变化-MMRM-汇总（COA分析集）
+  dataset:
+    binding_mode: linked
+    file: adqssum.sas7bdat
+    format: sas7bdat
+    relative_path: studies/fcn_159_002_luna/input/adam/adqssum.sas7bdat
+    sha256: 1BB5929DEAB16C36C1AE3872D6552E60C447E8336DDFD5FFF9CCA04C3B925ACE
+  adapter: null
+  mappings: {subject: USUBJID, response: CHG, baseline: BASE, visit: AVISITN}
+  derivations: []
+  filters:
+  - {variable: COAFL, operator: eq, value: 是}
+  - {variable: ANL01FL, operator: eq, value: '是'}
+  groups:
+  - id: PAINTE
+    label: PAINTE
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: PAINTE}
+  - id: PAINPR
+    label: PAINPR
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: PAINPR}
+  endpoint_definitions:
+  - group_id: PAINTE
+    endpoint_variable: PARAMCD
+    selected_codes: [PAINTE]
+    selection_mode: single_code
+    dimensions: *no_dimensions
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  - group_id: PAINPR
+    endpoint_variable: PARAMCD
+    selected_codes: [PAINPR]
+    selection_mode: single_code
+    dimensions: *no_dimensions
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  model_terms: *core_model
+  reml: true
+  covariance: *covariance
+  df_method: Kenward-Roger
+  estimands: *single_arm_estimands
+  treatment: null
+  trace:
+    dataset: ['14.2.12.1.2/分析数据集']
+    adapter: []
+    mappings: ['14.2.12.1.2/响应与基线', '14.2.12.1.2/访视与窗口']
+    derivations: []
+    filters: ['14.2.12.1.2/分析人群', '14.2.12.1.2/重复记录与行分配']
+    groups: ['14.2.12.1.2/终点变量与取值', '14.2.12.1.2/终点维度']
+    endpoint_definitions: ['14.2.12.1.2/终点变量与取值', '14.2.12.1.2/终点维度']
+    model_terms: ['14.2.12.1.2/固定效应']
+    reml: ['14.2.12.1.2/协方差与自由度']
+    covariance: ['14.2.12.1.2/协方差与自由度']
+    df_method: ['14.2.12.1.2/协方差与自由度']
+    estimands: ['14.2.12.1.2/估计量与输出']
+    treatment: []
+- analysis_id: MMRM-04
+  source_tfl_id: T14-2-13-1-2
+  title: 肌力评估观测值及相对基线变化-MMRM-汇总（COA分析集）
+  dataset:
+    binding_mode: linked
+    file: admk.sas7bdat
+    format: sas7bdat
+    relative_path: studies/fcn_159_002_luna/input/adam/admk.sas7bdat
+    sha256: FD7577DA53D2C129B3C6A3B2DD41387FD05F9A9824601023C9D16FB4C357708D
+  adapter: null
+  mappings: {subject: USUBJID, response: CHG, baseline: BASE, visit: AVISITN}
+  derivations: []
+  filters:
+  - {variable: COAFL, operator: eq, value: 是}
+  - {variable: ANL01FL, operator: eq, value: '是'}
+  groups:
+  - id: KENDTEN
+    label: Kendall 10-point muscle strength
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: KENDTEN}
+  endpoint_definitions:
+  - group_id: KENDTEN
+    endpoint_variable: PARAMCD
+    selected_codes: [KENDTEN]
+    selection_mode: single_code
+    dimensions: *no_dimensions
+    row_allocation_rule: one_row_per_subject_endpoint_visit
+  model_terms: *core_model
+  reml: true
+  covariance: *covariance
+  df_method: Kenward-Roger
+  estimands: *single_arm_estimands
+  treatment: null
+  trace:
+    dataset: ['14.2.13.1.2/分析数据集']
+    adapter: []
+    mappings: ['14.2.13.1.2/响应与基线', '14.2.13.1.2/访视与窗口']
+    derivations: []
+    filters: ['14.2.13.1.2/分析人群', '14.2.13.1.2/重复记录与行分配']
+    groups: ['14.2.13.1.2/终点变量与取值', '14.2.13.1.2/终点维度']
+    endpoint_definitions: ['14.2.13.1.2/终点变量与取值', '14.2.13.1.2/终点维度']
+    model_terms: ['14.2.13.1.2/固定效应']
+    reml: ['14.2.13.1.2/协方差与自由度']
+    covariance: ['14.2.13.1.2/协方差与自由度']
+    df_method: ['14.2.13.1.2/协方差与自由度']
+    estimands: ['14.2.13.1.2/估计量与输出']
+    treatment: []
+- analysis_id: MMRM-05
+  source_tfl_id: T14-2-14-1-2
+  title: 关节活动范围评估观测值及相对基线变化-MMRM-汇总（COA分析集）
+  dataset:
+    binding_mode: linked
+    file: admk.sas7bdat
+    format: sas7bdat
+    relative_path: studies/fcn_159_002_luna/input/adam/admk.sas7bdat
+    sha256: FD7577DA53D2C129B3C6A3B2DD41387FD05F9A9824601023C9D16FB4C357708D
+  adapter: null
+  mappings: {subject: USUBJID, response: CHG, baseline: BASE, visit: AVISITN}
+  derivations: []
+  filters:
+  - {variable: COAFL, operator: eq, value: 是}
+  - {variable: ANL01FL, operator: eq, value: '是'}
+  groups:
+  - id: SUMALL
+    label: SUMALL
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: SUMALL}
+  - id: SUMNECK
+    label: SUMNECK
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: SUMNECK}
+  - id: SUMHIP
+    label: SUMHIP
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: SUMHIP}
+  - id: SUMSHOU
+    label: SUMSHOU
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: SUMSHOU}
+  - id: SUMELBOW
+    label: SUMELBOW
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: SUMELBOW}
+  - id: SUMWRIST
+    label: SUMWRIST
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: SUMWRIST}
+  - id: SUMKNEE
+    label: SUMKNEE
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: SUMKNEE}
+  - id: SUMANKLE
+    label: SUMANKLE
+    predicates:
+    - {variable: PARAMCD, operator: eq, value: SUMANKLE}
+  endpoint_definitions:
+  - {group_id: SUMALL, endpoint_variable: PARAMCD, selected_codes: [SUMALL], selection_mode: single_code, dimensions: *no_dimensions, row_allocation_rule: one_row_per_subject_endpoint_visit}
+  - {group_id: SUMNECK, endpoint_variable: PARAMCD, selected_codes: [SUMNECK], selection_mode: single_code, dimensions: *no_dimensions, row_allocation_rule: one_row_per_subject_endpoint_visit}
+  - {group_id: SUMHIP, endpoint_variable: PARAMCD, selected_codes: [SUMHIP], selection_mode: single_code, dimensions: *no_dimensions, row_allocation_rule: one_row_per_subject_endpoint_visit}
+  - {group_id: SUMSHOU, endpoint_variable: PARAMCD, selected_codes: [SUMSHOU], selection_mode: single_code, dimensions: *no_dimensions, row_allocation_rule: one_row_per_subject_endpoint_visit}
+  - {group_id: SUMELBOW, endpoint_variable: PARAMCD, selected_codes: [SUMELBOW], selection_mode: single_code, dimensions: *no_dimensions, row_allocation_rule: one_row_per_subject_endpoint_visit}
+  - {group_id: SUMWRIST, endpoint_variable: PARAMCD, selected_codes: [SUMWRIST], selection_mode: single_code, dimensions: *no_dimensions, row_allocation_rule: one_row_per_subject_endpoint_visit}
+  - {group_id: SUMKNEE, endpoint_variable: PARAMCD, selected_codes: [SUMKNEE], selection_mode: single_code, dimensions: *no_dimensions, row_allocation_rule: one_row_per_subject_endpoint_visit}
+  - {group_id: SUMANKLE, endpoint_variable: PARAMCD, selected_codes: [SUMANKLE], selection_mode: single_code, dimensions: *no_dimensions, row_allocation_rule: one_row_per_subject_endpoint_visit}
+  model_terms: *core_model
+  reml: true
+  covariance: *covariance
+  df_method: Kenward-Roger
+  estimands: *single_arm_estimands
+  treatment: null
+  trace:
+    dataset: ['14.2.14.1.2/分析数据集']
+    adapter: []
+    mappings: ['14.2.14.1.2/响应与基线', '14.2.14.1.2/访视与窗口']
+    derivations: []
+    filters: ['14.2.14.1.2/分析人群', '14.2.14.1.2/重复记录与行分配']
+    groups: ['14.2.14.1.2/终点变量与取值', '14.2.14.1.2/终点维度']
+    endpoint_definitions: ['14.2.14.1.2/终点变量与取值', '14.2.14.1.2/终点维度']
+    model_terms: ['14.2.14.1.2/固定效应']
+    reml: ['14.2.14.1.2/协方差与自由度']
+    covariance: ['14.2.14.1.2/协方差与自由度']
+    df_method: ['14.2.14.1.2/协方差与自由度']
+    estimands: ['14.2.14.1.2/估计量与输出']
+    treatment: []

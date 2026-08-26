@@ -1,0 +1,36 @@
+tfl_id,field,approved_value,ai_candidate,status,question,source_trace,statistician_comment
+14.2.10.1.2,analysis_population,COA分析集,COAFL == 'Y',needs_confirmation,请确认 COA分析集 是否对应 ADSL/ADaM 中 COAFL == 'Y'，以及是否还需要 COAxxFL 限定。,shell title; ADaM columns include COAFL and COA01FL-COA10FL,是
+14.2.10.1.2,dataset,,adqssum,needs_confirmation,请确认 PedsQL MMRM 是否使用 ADQSSUM 而非 ADQS；ADQSSUM 已含总分和分量表 PARAMCD。,ADQSSUM/QSSUMPARAM; shell lines 1063-1114,是
+14.2.10.1.2,paramcd,,TS1/TS2/TS3/TS4/TS5/TS6 and PF/EF/SOF/SCF variants,needs_confirmation,请确认 shell 中“<受试者报告/家长报告>”和“<重复其他分量表>”是否对应这些年龄版本与报告者 PARAMCD。,ADQSSUM PARAM/PARAMCD scan,需要将总分分为受试者总分/家长总分
+14.2.10.1.2,response,CHG,CHG,confirmed,,"MMRM footnote says 以相对基线变化值为因变量; SAS model CHG = ...",
+14.2.10.1.2,model_terms,"AVISITN + REGION + BASE + BASE*AVISITN","CHG ~ AVISITN + REGION + BASE + BASE:AVISITN + us(AVISITN | USUBJID)",confirmed,,"shell SAS code: class avisitn region usubjid; model CHG = avisitn region base base*avisitn/ddfm=kenwardroger",
+14.2.10.1.2,covariance,"UN; fallback AR(1)","UN then AR(1)",confirmed,,"shell footnote: 无结构型方差结构（UN），不收敛则其他协方差结构例如AR(1)",
+14.2.10.1.2,model_package,mmrm,mmrm,confirmed,,skill mandatory rule,
+14.2.11.2,analysis_population,COA分析集,COAFL == 'Y',needs_confirmation,请确认疼痛强度是否还需要疼痛相关 COAxxFL 或基线 NRS 条件；本 MMRM 表标题未写 NRS≥1/2。,shell title; ADSL/ADaM COA flags,是
+14.2.11.2,dataset,,adqssum,needs_confirmation,请确认疼痛强度 MMRM 使用 ADQSSUM；候选 PARAMCD 包括 OVERPW、OVERTPW。,ADQSSUM scan; shell lines 1138-1152,是
+14.2.11.2,paramcd,,OVERPW; OVERTPW; possibly PTOTW in ADQS only,needs_confirmation,请确认表 14.2.11.2 是否只包含总体疼痛/总体肿瘤疼痛，还是还应处理特定部位肿瘤疼痛 PTOTW。,ADQSSUM has OVERPW/OVERTPW; ADQS has PTOTW,是
+14.2.11.2,response,CHG,CHG,confirmed,,shell footnote and SAS model,
+14.2.11.2,model_terms,"AVISITN + REGION + BASE + BASE*AVISITN","CHG ~ AVISITN + REGION + BASE + BASE:AVISITN + us(AVISITN | USUBJID)",confirmed,,shell SAS code,
+14.2.11.2,covariance,"UN; fallback AR(1)","UN then AR(1)",confirmed,,shell footnote,
+14.2.11.2,model_package,mmrm,mmrm,confirmed,,skill mandatory rule,
+14.2.12.1.2,analysis_population,COA分析集,COAFL == 'Y',needs_confirmation,请确认疼痛干扰是否还需要报告者相关 COAxxFL。,shell title; ADaM COA flags,是
+14.2.12.1.2,dataset,,adqssum,needs_confirmation,请确认疼痛干扰 MMRM 使用 ADQSSUM；候选 PARAMCD 包括 PAINPR、PAINTE。,ADQSSUM scan; shell lines 1216-1231,是
+14.2.12.1.2,paramcd,,PAINPR; PAINTE,needs_confirmation,请确认家长报告和患者报告是否都进入同一张 MMRM 表，还是需要分层/分表输出。,ADQSSUM PARAM/PARAMCD scan; shell programming note mentions 家长报告/患者报告,是
+14.2.12.1.2,response,CHG,CHG,confirmed,,shell footnote and SAS model,
+14.2.12.1.2,model_terms,"AVISITN + REGION + BASE + BASE*AVISITN","CHG ~ AVISITN + REGION + BASE + BASE:AVISITN + us(AVISITN | USUBJID)",confirmed,,shell SAS code,
+14.2.12.1.2,covariance,"UN; fallback AR(1)","UN then AR(1)",confirmed,,shell footnote,
+14.2.12.1.2,model_package,mmrm,mmrm,confirmed,,skill mandatory rule,
+14.2.13.1.2,analysis_population,COA分析集,COAFL == 'Y',needs_confirmation,请确认肌力评估是否使用 COA分析集，并是否需要额外肌力相关 flag。,shell title; ADSL/ADaM COA flags,是
+14.2.13.1.2,dataset,,admk,needs_confirmation,请确认肌力评估 MMRM 使用 ADMK；ADMK 中存在 PARAMCD=KENDTEN。,ADMK scan; shell lines 1243-1247,是
+14.2.13.1.2,paramcd,,KENDTEN,needs_confirmation,请确认表 14.2.13.1.2 是否只使用肯德尔十分制，还是还要包括 MAC 等其他肌力评分。,ADMK scan,是
+14.2.13.1.2,response,CHG,CHG,confirmed,,shell footnote,
+14.2.13.1.2,model_terms,"AVISITN + REGION + BASE + BASE*AVISITN","CHG ~ AVISITN + REGION + BASE + BASE:AVISITN + us(AVISITN | USUBJID)",needs_confirmation,肌力脚注写了模型项，但没有在同一段重复完整 SAS code；请确认沿用前面 COA MMRM SAS 结构。,shell lines 1243-1247,是
+14.2.13.1.2,covariance,UN,UN,needs_confirmation,肌力脚注未在截取上下文中明确 fallback AR(1)，请确认是否沿用。,shell lines 1243-1247,是
+14.2.13.1.2,model_package,mmrm,mmrm,confirmed,,skill mandatory rule,
+14.2.14.1.2,analysis_population,COA分析集,COAFL == 'Y',needs_confirmation,请确认关节活动范围评估是否使用 COA分析集，并是否需要额外关节相关 flag。,shell title; ADSL/ADaM COA flags,是
+14.2.14.1.2,dataset,,admk,needs_confirmation,请确认关节活动范围 MMRM 使用 ADMK；ADMK 中存在关节活动范围评估相关 PARAMCD。,ADMK scan; shell lines 1262-1265,是
+14.2.14.1.2,paramcd,,"SUMALL; SUMNECK; SUMHIP; SUMSHOU; SUMELBOW; SUMWRIST; SUMKNEE; SUMANKLE; plus joint-level PARAMCD",needs_confirmation,请确认 MMRM 表使用“所有位置/各位置之和”还是全部单关节 PARAMCD。,ADMK scan; shell programming note says 增加所有关节汇总“所有位置”,是
+14.2.14.1.2,response,CHG,CHG,confirmed,,shell footnote,
+14.2.14.1.2,model_terms,"AVISITN + REGION + BASE + BASE*AVISITN","CHG ~ AVISITN + REGION + BASE + BASE:AVISITN + us(AVISITN | USUBJID)",needs_confirmation,关节活动范围脚注写了模型项，但没有在同一段重复完整 SAS code；请确认沿用前面 COA MMRM SAS 结构。,shell lines 1262-1265,是
+14.2.14.1.2,covariance,UN,UN,needs_confirmation,关节活动范围脚注未在截取上下文中明确 fallback AR(1)，请确认是否沿用。,shell lines 1262-1265,是
+14.2.14.1.2,model_package,mmrm,mmrm,confirmed,,skill mandatory rule,

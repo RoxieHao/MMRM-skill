@@ -1,7 +1,9 @@
 options(encoding = "UTF-8")
 find_root <- function(path) { current <- normalizePath(path, winslash = "/", mustWork = TRUE); repeat { if (file.exists(file.path(current, ".codex", "study-mmrm-analysis", "R", "analysis_plan.R"))) return(current); parent <- dirname(current); if (parent == current) stop("project root not found"); current <- parent } }
 project_dir <- find_root(getwd()); helper_dir <- file.path(project_dir, ".codex", "study-mmrm-analysis", "R")
-for (helper in c("canonical_hash.R", "standard_analysis_definition.R", "analysis_plan.R")) source(file.path(helper_dir, helper), encoding = "UTF-8")
+# standard_contract.R 提供 standard_validate_execution_context()（含 sas_execution_profile 校验），
+# analysis_plan.R 的 execution_context 校验依赖它，因此必须一起 source。
+for (helper in c("canonical_hash.R", "standard_contract.R", "standard_analysis_definition.R", "analysis_plan.R")) source(file.path(helper_dir, helper), encoding = "UTF-8")
 source(file.path(project_dir, ".codex", "study-mmrm-analysis", "scripts", "check_analysis_plan.R"), local = globalenv(), encoding = "UTF-8")
 explicit <- synthetic_analysis_plan()
 validate_analysis_plan(explicit, synthetic_trace_ids())

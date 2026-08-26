@@ -1,1 +1,1 @@
-tfl_id,tfl_type,title,scope_status,output_status,raw_output_file,final_tfl_file,log_file,qc_file,note
+study_id,analysis_id,tfl_id,tfl_type,title,scope_status,programming_language,binding_mode,program_file,program_sha256,execution_status,run_status,computational_risk,raw_output_file,final_tfl_file,diagnostic_file,run_record_file,plan_sha256,approval_payload_sha256,contract_sha256,expected_input_sha256,actual_input_sha256,collector_mode,collected_at_utc,note

@@ -1,0 +1,229 @@
+analysis_plan_schema_version: '2.2'
+study_id: fcn_159_002_inputmd
+execution_context:
+  profile_version: standard-mmrm-profile/v1
+  data_availability: ~
+  data_classification: ~
+  intended_use: ~
+  sas_execution_profile: sas-9.4m5-self-contained/v1
+analyses:
+- analysis_id: MMRM-01
+  source_tfl_id: 14.2.10.1.2
+  title: PedsQL生活质量量表观测值及相对基线变化-MMRM-汇总（COA分析集）
+  dataset:
+    binding_mode: ~
+    file: ~
+    format: ~
+    relative_path: ~
+    sha256: ~
+  adapter: ~
+  mappings:
+    subject: ~
+    response: ~
+    baseline: ~
+    visit: ~
+  derivations: []
+  filters: []
+  groups: []
+  endpoint_definitions: []
+  model_terms: []
+  reml: yes
+  covariance:
+    primary: ~
+    fallback: []
+  df_method: ~
+  estimands:
+    visit_lsmeans: ~
+    treatment_visit_lsmeans: ~
+    pairwise_differences: ~
+  treatment: ~
+  trace:
+    dataset: []
+    adapter: []
+    mappings: []
+    derivations: []
+    filters: []
+    groups: []
+    endpoint_definitions: []
+    model_terms: []
+    reml: []
+    covariance: []
+    df_method: []
+    estimands: []
+    treatment: []
+- analysis_id: MMRM-02
+  source_tfl_id: 14.2.11.2
+  title: 疼痛强度观测值及相对基线变化-MMRM-汇总（COA分析集）
+  dataset:
+    binding_mode: ~
+    file: ~
+    format: ~
+    relative_path: ~
+    sha256: ~
+  adapter: ~
+  mappings:
+    subject: ~
+    response: ~
+    baseline: ~
+    visit: ~
+  derivations: []
+  filters: []
+  groups: []
+  endpoint_definitions: []
+  model_terms: []
+  reml: yes
+  covariance:
+    primary: ~
+    fallback: []
+  df_method: ~
+  estimands:
+    visit_lsmeans: ~
+    treatment_visit_lsmeans: ~
+    pairwise_differences: ~
+  treatment: ~
+  trace:
+    dataset: []
+    adapter: []
+    mappings: []
+    derivations: []
+    filters: []
+    groups: []
+    endpoint_definitions: []
+    model_terms: []
+    reml: []
+    covariance: []
+    df_method: []
+    estimands: []
+    treatment: []
+- analysis_id: MMRM-03
+  source_tfl_id: 14.2.12.1.2
+  title: 疼痛干扰观测值及相对基线变化-MMRM-汇总（COA分析集）
+  dataset:
+    binding_mode: ~
+    file: ~
+    format: ~
+    relative_path: ~
+    sha256: ~
+  adapter: ~
+  mappings:
+    subject: ~
+    response: ~
+    baseline: ~
+    visit: ~
+  derivations: []
+  filters: []
+  groups: []
+  endpoint_definitions: []
+  model_terms: []
+  reml: yes
+  covariance:
+    primary: ~
+    fallback: []
+  df_method: ~
+  estimands:
+    visit_lsmeans: ~
+    treatment_visit_lsmeans: ~
+    pairwise_differences: ~
+  treatment: ~
+  trace:
+    dataset: []
+    adapter: []
+    mappings: []
+    derivations: []
+    filters: []
+    groups: []
+    endpoint_definitions: []
+    model_terms: []
+    reml: []
+    covariance: []
+    df_method: []
+    estimands: []
+    treatment: []
+- analysis_id: MMRM-04
+  source_tfl_id: 14.2.13.1.2
+  title: 肌力评估观测值及相对基线变化-MMRM-汇总（COA分析集）
+  dataset:
+    binding_mode: ~
+    file: ~
+    format: ~
+    relative_path: ~
+    sha256: ~
+  adapter: ~
+  mappings:
+    subject: ~
+    response: ~
+    baseline: ~
+    visit: ~
+  derivations: []
+  filters: []
+  groups: []
+  endpoint_definitions: []
+  model_terms: []
+  reml: yes
+  covariance:
+    primary: ~
+    fallback: []
+  df_method: ~
+  estimands:
+    visit_lsmeans: ~
+    treatment_visit_lsmeans: ~
+    pairwise_differences: ~
+  treatment: ~
+  trace:
+    dataset: []
+    adapter: []
+    mappings: []
+    derivations: []
+    filters: []
+    groups: []
+    endpoint_definitions: []
+    model_terms: []
+    reml: []
+    covariance: []
+    df_method: []
+    estimands: []
+    treatment: []
+- analysis_id: MMRM-05
+  source_tfl_id: 14.2.14.1.2
+  title: 关节活动范围评估观测值及相对基线变化-MMRM-汇总（COA分析集）
+  dataset:
+    binding_mode: ~
+    file: ~
+    format: ~
+    relative_path: ~
+    sha256: ~
+  adapter: ~
+  mappings:
+    subject: ~
+    response: ~
+    baseline: ~
+    visit: ~
+  derivations: []
+  filters: []
+  groups: []
+  endpoint_definitions: []
+  model_terms: []
+  reml: yes
+  covariance:
+    primary: ~
+    fallback: []
+  df_method: ~
+  estimands:
+    visit_lsmeans: ~
+    treatment_visit_lsmeans: ~
+    pairwise_differences: ~
+  treatment: ~
+  trace:
+    dataset: []
+    adapter: []
+    mappings: []
+    derivations: []
+    filters: []
+    groups: []
+    endpoint_definitions: []
+    model_terms: []
+    reml: []
+    covariance: []
+    df_method: []
+    estimands: []
+    treatment: []

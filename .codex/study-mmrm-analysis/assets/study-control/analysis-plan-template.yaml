@@ -1,39 +1,90 @@
-analysis_plan_schema_version: "2.0"
+# analysis-plan.yaml 模板（schema 2.1）
+#
+# 这是唯一机器可读的统计来源。填写规则：
+#   - 未决定的必填值保留 null；明确为空的集合保留 []。
+#   - 绝不为了让校验通过而填 profile default 或猜测值。
+#   - 不得从 endpoint-mapping.yaml、旧 analysis-specification.md、历史生成程序
+#     （旧 R wrapper、旧 <analysis_id>_template.sas）或任何 Markdown 自由文本迁移统计值。
+#   - 每个 analysis 完整且自包含：没有 study 级 defaults、继承或 override。
+#   - 每个 analysis 对应一个 TFL，批准后生成一个自包含 analysis/r/<safe_analysis_id>.R
+#     和一个自包含 analysis/sas/<safe_analysis_id>.sas（SAS 不是 template）。
+# 填写细则见 .codex/study-mmrm-analysis/references/analysis-plan-compilation.md。
+analysis_plan_schema_version: "2.1"
 study_id: STUDY-ID
 execution_context:
   profile_version: standard-mmrm-profile/v1
+  # data_availability: available | none
+  # data_classification: production | dummy | none
+  # intended_use: formal_analysis | technical_validation | code_generation
+  # planned 分析要求严格组合：none + none + code_generation。
   data_availability: null
   data_classification: null
   intended_use: null
+  # 批准的目标 SAS 执行环境。本流水线从不执行 SAS：生成的 .sas 只是代码交付物，
+  # 由统计师在该环境（SAS 9.4M5、UTF-8 会话、具备 fcmp/bit_operations/sha256 能力）自行运行。
+  # 该值不由 renderer 探测或填默认值。
+  sas_execution_profile: sas-9.4m5-self-contained/v1
 analyses:
   - analysis_id: MMRM-01
     source_tfl_id: TFL-001
     title: null
+    # dataset.binding_mode 按 analysis 逐个决定，同一 study 可以混合 planned 与 linked。
+    #
+    # linked（该 analysis 的 ADaM 实体文件已存在并已登记）：
+    #   binding_mode: linked
+    #   file: adqs.sas7bdat
+    #   format: sas7bdat            # closed set：sas7bdat | csv（rds 被跨语言阻断）
+    #   relative_path: studies/<study_id>/input/adam/adqs.sas7bdat
+    #   sha256: <64 位十六进制>
+    #   要求 execution_context.data_availability: available。
+    #
+    # planned（该 analysis 暂无 ADaM 实体文件，只生成代码）：
+    #   binding_mode: planned
+    #   file: adqs.sas7bdat
+    #   format: sas7bdat
+    #   relative_path: null
+    #   sha256: null
+    #   要求 execution_context 严格为 none + none + code_generation。
+    #
+    # 没有 ADaM 数据时绝对不要填写假的 relative_path 或 sha256，也不得执行程序。
+    # planned 生成的程序永久带 code-generation-only gate；数据到达后必须重新编译本 plan、
+    # 重新 finalize、重新 approve-and-generate，不能只把程序里的 DATA_AVAILABLE 改成 TRUE/YES。
     dataset:
+      binding_mode: null
       file: null
       format: null
       relative_path: null
       sha256: null
+    # adapter 非 null 且无法确定性展开为受支持的 derivations/filters/mappings 时，
+    # 生成以 PROGRAM-INLINE-ADAPTER-UNSUPPORTED:<analysis_id> 阻断，且不发布任何单语言产物。
+    # 请回到本文件用受支持结构表达：predicate operator: in、derivation operation: recode、filters、mappings。
     adapter: null
+    # 必填 subject / response / baseline / visit；visit_label 与 treatment 为可选键，
+    # 需要时再加入本块，不需要时不要写成 null。
     mappings:
       subject: null
       response: null
       baseline: null
       visit: null
+    # 内建 derivation 只有 typed recode，必须显式声明 unmatched 与 missing 策略。
     derivations: []
     filters: []
     groups: []
     endpoint_definitions: []
     fixed_effects: []
+    reml: true
+    # 只填批准的协方差结构与批准顺序；fallback 是可执行控制流，不是注释。
     covariance:
       primary: null
       fallback: []
     df_method: null
+    # 只有显式为 true 的估计量会被渲染进程序。
     estimands:
       visit_lsmeans: null
       treatment_visit_lsmeans: null
       pairwise_differences: null
     treatment: null
+    # closed trace map：把 SRC-*（源证据 ID）与派生决定 ID（<TFL ID>/<规则类别>）填进对应键。
     trace:
       dataset: []
       adapter: []
@@ -43,6 +94,7 @@ analyses:
       groups: []
       endpoint_definitions: []
       fixed_effects: []
+      reml: []
       covariance: []
       df_method: []
       estimands: []

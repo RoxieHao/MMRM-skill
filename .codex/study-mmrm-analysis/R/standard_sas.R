@@ -31,13 +31,7 @@ standard_sas_predicate <- function(predicate) {
   )
 }
 
-standard_sas_fixed_terms <- function(analysis) {
-  map <- c(
-    visit = "_visit", baseline = "_baseline", baseline_by_visit = "_baseline*_visit",
-    treatment = "_treatment", treatment_by_visit = "_treatment*_visit"
-  )
-  unname(map[as.character(unlist(analysis$fixed_effects, use.names = FALSE))])
-}
+standard_sas_fixed_terms <- function(analysis) standard_normalize_model_terms(analysis)$sas_terms
 
 standard_sas_recode_lines <- function(derivation) {
   ir <- standard_normalize_recode(derivation); source <- ir$source_variable; target <- ir$target_variable
@@ -101,6 +95,9 @@ render_standard_sas_template <- function(contract, analysis, approval_payload_sh
     stop("不支持的 SAS input extension。")
   )
   mappings <- analysis$mappings
+  model_norm <- standard_normalize_model_terms(analysis)
+  model_covariates <- model_norm$covariate_variables
+  class_covariates <- model_norm$class_covariates
   filters <- if (length(analysis$filters)) vapply(analysis$filters, standard_sas_predicate, character(1)) else character()
   group_lines <- unlist(lapply(seq_along(analysis$groups), function(i) {
     group <- analysis$groups[[i]]
@@ -125,6 +122,7 @@ render_standard_sas_template <- function(contract, analysis, approval_payload_sh
     "  length _analysis_group $200;", group_lines,
     "  if missing(_subject) or missing(_response) or missing(_baseline) or missing(_visit) then delete;",
     if (!is.null(mappings$treatment)) "  if missing(_treatment) then delete;",
+    if (length(model_covariates)) paste0("  if missing(", model_covariates, ") then delete;"),
     "run;", "",
     "proc sort data=_standard_mmrm; by _analysis_group _subject _visit; run;",
     "/* QC: review duplicate count, baseline consistency, and factor levels before model execution. */",
@@ -147,6 +145,7 @@ render_standard_sas_template <- function(contract, analysis, approval_payload_sh
   if (!is.null(mappings$treatment)) {
     class_vars <- c(class_vars, paste0("_treatment(ref=", standard_sas_quote(analysis$treatment$reference), ")"))
   }
+  if (length(class_covariates)) class_vars <- c(class_vars, class_covariates)
   alpha <- if (is.null(analysis$treatment)) 0.05 else 1 - analysis$treatment$confidence_level
   lsmeans <- c(
     paste0("  lsmeans _visit / cl alpha=", format(alpha, scientific = FALSE, trim = TRUE), ";"),

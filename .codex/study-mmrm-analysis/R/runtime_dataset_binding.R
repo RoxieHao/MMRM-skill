@@ -1,7 +1,7 @@
 # 审批前受控运行数据集绑定：候选发现、确认解析和 manifest 提升。
 # 依赖 io.R、intake_review.R（用于读取 manifest）和 intake_extraction.R（用于 SHA helper）。
 
-runtime_dataset_supported_formats <- function() c("csv", "sas7bdat", "rds")
+runtime_dataset_supported_formats <- function() c("csv", "sas7bdat")
 
 runtime_dataset_file_sha256 <- function(path) {
   if (!requireNamespace("digest", quietly = TRUE)) stop("digest package is required to validate runtime dataset binding.")
@@ -16,7 +16,6 @@ runtime_dataset_read_schema <- function(path, format) {
       format,
       sas7bdat = { if (!requireNamespace("haven", quietly = TRUE)) stop("缺少 haven，无法读取 sas7bdat。") ; haven::read_sas(path, n_max = 0) },
       csv = utils::read.csv(path, nrows = 0L, check.names = FALSE, fileEncoding = "UTF-8-BOM"),
-      rds = readRDS(path),
       stop("不支持的运行数据格式：", format)
     )
     if (!is.data.frame(data)) stop("运行数据必须读取为 data.frame。")
@@ -31,7 +30,6 @@ runtime_dataset_read_paramcd <- function(path, format, columns) {
       format,
       sas7bdat = haven::read_sas(path, col_select = "PARAMCD"),
       csv = read_utf8_bom_csv(path),
-      rds = readRDS(path),
       stop("unsupported format")
     )
     if (!is.data.frame(data) || !"PARAMCD" %in% names(data)) return(character())
@@ -69,10 +67,10 @@ runtime_dataset_binding_text <- function(item, prefix = "Runtime dataset candida
 
 runtime_dataset_parse_binding <- function(value) {
   value <- trimws(as.character(value))
-  pattern <- "file=([^;|[:space:]]+);\\s*format=(csv|sas7bdat|rds);\\s*relative_path=([^;|[:space:]]+);\\s*sha256=([A-Fa-f0-9]{64})"
+  pattern <- "file=([^;|[:space:]]+);\\s*format=(csv|sas7bdat);\\s*relative_path=([^;|[:space:]]+);\\s*sha256=([A-Fa-f0-9]{64})"
   match <- regmatches(value, regexec(pattern, value, ignore.case = TRUE, perl = TRUE))[[1]]
   if (length(match) != 5L) return(NULL)
-  list(file = match[[2]], format = tolower(match[[3]]), relative_path = gsub("\\\\", "/", match[[4]]), sha256 = toupper(match[[5]]))
+  list(binding_mode = "linked", file = match[[2]], format = tolower(match[[3]]), relative_path = gsub("\\\\", "/", match[[4]]), sha256 = toupper(match[[5]]))
 }
 
 runtime_dataset_binding_matches <- function(binding, item) {
@@ -101,6 +99,7 @@ runtime_dataset_promote_binding <- function(study_dir, project_dir, bindings) {
   manifest$relative_path <- gsub("\\\\", "/", trimws(as.character(manifest$relative_path)))
   if (anyDuplicated(tolower(manifest$relative_path))) stop("input-manifest.csv 的 relative_path 必须唯一，不能提升重复记录。")
   for (binding in bindings) {
+    if (!is.list(binding) || !identical(binding$binding_mode, "linked")) stop("PLAN-SCHEMA-DATASET-BINDING-RUNTIME: runtime_dataset_promote_binding only accepts linked bindings.")
     index <- which(manifest$relative_path == binding$relative_path & as.character(manifest$file_name) == binding$file)
     if (length(index) != 1L) stop("无法唯一定位待提升的 manifest 记录：", binding$relative_path)
     if (runtime_dataset_format(binding$file) != binding$format) stop("确认 binding 的 file/format 不一致：", binding$file)
@@ -116,93 +115,176 @@ runtime_dataset_promote_binding <- function(study_dir, project_dir, bindings) {
 }
 
 
-# ---- ADaM specification 证据关联（仅列出候选，不评分、不排序）-------------
-# 目标：在 statistical review 生成阶段仅读取 ADaM specification XLSX，
-# 为每个 TFL 稳定列出所有候选分析数据集（dataset sheet），按数据集名升序，
-# 并附 sheet/row 与派生 PARAM sheet 证据。不做文本规范化、不做匹配打分、不做排序打分，
-# 不读取任何 SAS7BDAT，不写 SHA/format/path，不自动确认数据集或 PARAMCD。
-# 真实文件与 SHA 的绑定在统计师 approve 后的 finalize/代码生成阶段才产生。
+# ---- ADaM specification 变量级 typed projection ---------------------------
+# 基于当前 ADaM specification workbook 布局解析变量级定义、PARAM 定义与 codelist，
+# 供 AI 生成 statistical review 候选并与 runtime profile 对齐。只解析已识别布局；
+# required header 缺失或布局无法识别即报 parse error，不猜列义、不为未知 workbook 建兼容层。
+# 不评分、不排序、不替 AI 选择 dataset/PARAMCD。
 
-# 抽取当前 study 已登记 XLSX（ADaM specification）为 sheet/row 证据。
-# 返回 data.frame(relative_path, sheet, row, text)；无可读 XLSX 时返回空表。
-runtime_dataset_spec_evidence <- function(study_dir, project_dir) {
-  empty <- data.frame(relative_path = character(), sheet = character(), row = integer(), text = character(), stringsAsFactors = FALSE)
-  manifest <- tryCatch(intake_manifest_for_review(study_dir, project_dir)$rows, error = function(e) NULL)
-  if (is.null(manifest) || !nrow(manifest)) return(empty)
+# 已登记 ADaM specification XLSX 的（relative_path, absolute_path）。无则空。
+runtime_spec_workbook_paths <- function(study_dir, project_dir) {
+  manifest <- intake_manifest_for_review(study_dir, project_dir)$rows
+  if (!nrow(manifest)) return(data.frame(relative_path = character(), path = character(), stringsAsFactors = FALSE))
   rel <- gsub("\\\\", "/", trimws(as.character(manifest$relative_path)))
   status <- trimws(as.character(manifest$status))
-  is_xlsx <- tolower(tools::file_ext(rel)) == "xlsx"
-  keep <- startsWith(rel, "input/") & is_xlsx & status %in% c("registered_input", "linked_source")
-  if (!any(keep)) return(empty)
-  pieces <- list()
+  keep <- startsWith(rel, "input/") & tolower(tools::file_ext(rel)) == "xlsx" & status %in% c("registered_input", "linked_source")
+  out <- data.frame(relative_path = character(), path = character(), stringsAsFactors = FALSE)
   for (relative_path in unique(rel[keep])) {
-    path <- normalizePath(file.path(study_dir, relative_path), winslash = "/", mustWork = FALSE)
-    if (!file.exists(path)) next
-    extracted <- tryCatch(intake_extract_xlsx(path), error = function(e) list(status = "failed"))
-    if (!identical(extracted$status, "succeeded")) next
-    text <- as.character(extracted$text)
-    locators <- as.character(extracted$locators)
-    if (!length(text) || length(text) != length(locators)) next
-    sheet <- sub("^sheet=([^,]*),.*$", "\\1", locators)
-    row <- suppressWarnings(as.integer(sub("^.*,row=([0-9]+)$", "\\1", locators)))
-    pieces[[length(pieces) + 1L]] <- data.frame(
-      relative_path = relative_path, sheet = trimws(sheet), row = row, text = text,
-      stringsAsFactors = FALSE
-    )
+    abs <- normalizePath(file.path(study_dir, relative_path), winslash = "/", mustWork = FALSE)
+    if (file.exists(abs)) out <- rbind(out, data.frame(relative_path = relative_path, path = abs, stringsAsFactors = FALSE))
   }
-  if (!length(pieces)) return(empty)
-  do.call(rbind, pieces)
+  out
 }
 
-# 将 spec sheet 关联到某个运行数据集（确定性、精确）：
-#   1) sheet 名与逻辑数据集名完全一致（如 ADQSSUM）；
-#   2) 该数据集派生的 PARAM sheet（如 ADQSSUM -> QSSUMPARAM，ADLB -> LBPARAM）。
-# 不使用宽泛的“文本提及”关联，避免 CONTENT/CODELIST 等结构性 sheet 把噪声引入每个数据集。
-runtime_dataset_spec_sheets_for <- function(spec_evidence, logical_name) {
-  if (!nrow(spec_evidence)) return(character())
-  logical_upper <- toupper(logical_name)
-  param_sheet <- paste0(sub("^AD", "", logical_upper), "PARAM")  # 确定性派生 PARAM sheet 名
-  targets <- c(logical_upper, param_sheet)
-  sheet_upper <- toupper(trimws(spec_evidence$sheet))
-  unique(spec_evidence$sheet[sheet_upper %in% targets])
-}
-
-# 压缩同 sheet 的 row 为区间字符串，供证据引用。
-runtime_dataset_compress_rows <- function(rows) {
-  rows <- sort(unique(rows[!is.na(rows)]))
-  if (!length(rows)) return("")
-  if (length(rows) == 1L) return(as.character(rows))
-  paste0(min(rows), "..", max(rows))
-}
-
-# 从 spec 证据中确定性识别“数据集 sheet”：以 AD 开头且不是以 PARAM 结尾的 sheet
-# （如 ADSL、ADQS、ADQSSUM、ADEXSUM）。派生 PARAM sheet（如 QSSUMPARAM）单独关联。
-runtime_dataset_spec_dataset_sheets <- function(spec_evidence) {
-  if (!nrow(spec_evidence)) return(character())
-  sheets <- unique(trimws(spec_evidence$sheet))
-  upper <- toupper(sheets)
-  keep <- grepl("^AD[A-Z0-9]+$", upper) & !grepl("PARAM$", upper)
-  sheets[keep]
-}
-
-# 仅基于 ADaM specification 稳定列出候选数据集（dataset sheet），不评分、不排序打分、不做文本匹配。
-# 候选按数据集名（大写）升序稳定排列；每个候选附 sheet/row 与派生 PARAM sheet 证据。
-# 相同输入必然产生相同、可复现的候选列表；不读取任何 SAS7BDAT。
-runtime_dataset_spec_list_datasets <- function(spec_evidence) {
-  dataset_sheets <- runtime_dataset_spec_dataset_sheets(spec_evidence)
-  if (!length(dataset_sheets)) return(list(candidates = list(), has_datasets = FALSE))
-  ordered <- dataset_sheets[order(toupper(dataset_sheets), method = "radix")]
-  candidates <- lapply(ordered, function(sheet) {
-    logical_upper <- toupper(sheet)
-    param_sheet_name <- paste0(sub("^AD", "", logical_upper), "PARAM")
-    sheet_upper <- toupper(trimws(spec_evidence$sheet))
-    own <- sheet_upper == logical_upper
-    param <- sheet_upper == param_sheet_name
-    own_rows <- runtime_dataset_compress_rows(spec_evidence$row[own])
-    param_rows <- runtime_dataset_compress_rows(spec_evidence$row[param])
-    sheet_ref <- if (nzchar(own_rows)) paste0("sheet=", sheet, "; row=", own_rows) else paste0("sheet=", sheet)
-    param_ref <- if (any(param)) paste0("PARAM sheet=", spec_evidence$sheet[param][[1]], if (nzchar(param_rows)) paste0("; row=", param_rows) else "") else ""
-    list(name = sheet, sheet_ref = sheet_ref, param_ref = param_ref)
+# 读取 workbook 每个 sheet 为 trim 后的字符矩阵（保留行列位置，NA -> ""）。
+runtime_spec_read_grids <- function(path) {
+  if (!requireNamespace("readxl", quietly = TRUE)) stop("缺少 readxl，无法解析 ADaM specification。")
+  sheets <- readxl::excel_sheets(path)
+  grids <- lapply(sheets, function(s) {
+    df <- suppressWarnings(suppressMessages(readxl::read_excel(path, sheet = s, col_names = FALSE, .name_repair = "minimal")))
+    if (!nrow(df) || !ncol(df)) return(matrix(character(), 0L, 0L))
+    m <- matrix("", nrow = nrow(df), ncol = ncol(df))
+    for (j in seq_len(ncol(df))) { v <- as.character(df[[j]]); v[is.na(v)] <- ""; m[, j] <- trimws(v) }
+    m
   })
-  list(candidates = candidates, has_datasets = TRUE)
+  names(grids) <- sheets
+  grids
+}
+
+# sheet 分类（与 evidence 层一致的确定性命名约定）。
+runtime_spec_is_dataset_sheet <- function(sheet) { u <- toupper(sheet); grepl("^AD[A-Z0-9]+$", u) && !grepl("PARAM$", u) }
+runtime_spec_is_param_sheet <- function(sheet) grepl("PARAM$", toupper(sheet))
+runtime_spec_is_codelist_sheet <- function(sheet) toupper(trimws(sheet)) == "CODELIST"
+
+# dataset 变量表的规范列标题（按当前 specification 布局）。
+runtime_spec_dataset_columns <- function() c(
+  variable = "Variable", label = "Label", type = "Type", length = "Length",
+  format = "Display Format", codelist = "Controlled Term or Formats",
+  core = "Core", derivation = "Source/Derivation/Comments")
+
+# dataset sheet 顶部 "key:" -> value 元数据块（value 取该行最后一个非空单元格）。
+runtime_spec_dataset_metadata <- function(grid, header_row) {
+  meta <- list()
+  for (r in seq_len(header_row - 1L)) {
+    key <- grid[r, 1]
+    if (!nzchar(key) || !endsWith(key, ":")) next
+    values <- grid[r, ][nzchar(grid[r, ])]
+    if (length(values) < 2L) next
+    meta[[sub(":$", "", key)]] <- values[[length(values)]]
+  }
+  meta
+}
+
+runtime_spec_parse_dataset_sheet <- function(sheet, grid, relative_path) {
+  header_row <- NA_integer_
+  if (ncol(grid) >= 2L) for (r in seq_len(nrow(grid))) if (grid[r, 1] == "Variable" && grid[r, 2] == "Label") { header_row <- r; break }
+  if (is.na(header_row)) stop("specification parse error: sheet ", sheet, " 缺少变量表头（Variable | Label）。")
+  header <- grid[header_row, ]
+  cols <- runtime_spec_dataset_columns()
+  idx <- vapply(cols, function(name) { m <- which(header == name); if (length(m)) m[[1]] else NA_integer_ }, integer(1))
+  missing_required <- c("variable", "label", "type")[is.na(idx[c("variable", "label", "type")])]
+  if (length(missing_required)) stop("specification parse error: sheet ", sheet, " 缺少必需列：", paste(cols[missing_required], collapse = "、"), "。")
+  cell <- function(r, key) { j <- idx[[key]]; if (is.na(j) || j > ncol(grid)) "" else grid[r, j] }
+  variables <- list()
+  if (header_row < nrow(grid)) for (r in seq.int(header_row + 1L, nrow(grid))) {
+    name <- cell(r, "variable")
+    if (!nzchar(name)) next
+    variables[[length(variables) + 1L]] <- list(
+      variable = name, label = cell(r, "label"), type = cell(r, "type"), length = cell(r, "length"),
+      format = cell(r, "format"), codelist = cell(r, "codelist"), core = cell(r, "core"),
+      derivation = cell(r, "derivation"), source = paste0("sheet=", sheet, "; row=", r))
+  }
+  list(dataset = sheet, relative_path = relative_path, header_row = header_row,
+       metadata = runtime_spec_dataset_metadata(grid, header_row), variables = variables)
+}
+
+runtime_spec_parse_param_sheet <- function(sheet, grid, relative_path) {
+  if (!nrow(grid)) stop("specification parse error: PARAM sheet ", sheet, " 为空。")
+  header <- grid[1, ]
+  find <- function(name) { m <- which(toupper(header) == toupper(name)); if (length(m)) m[[1]] else NA_integer_ }
+  i_cd <- find("PARAMCD"); i_pm <- find("PARAM"); i_pn <- find("PARAMN")
+  if (is.na(i_cd) || is.na(i_pm)) stop("specification parse error: PARAM sheet ", sheet, " 缺少 PARAMCD/PARAM 列。")
+  ctx_cols <- setdiff(which(nzchar(header)), c(i_cd, i_pm, i_pn))
+  parameters <- list()
+  if (nrow(grid) > 1L) for (r in seq.int(2L, nrow(grid))) {
+    code <- grid[r, i_cd]
+    if (!nzchar(code)) next
+    context <- list()
+    for (j in ctx_cols) { val <- grid[r, j]; if (nzchar(val)) context[[header[[j]]]] <- val }
+    parameters[[length(parameters) + 1L]] <- list(
+      paramcd = code, param = grid[r, i_pm], paramn = if (is.na(i_pn)) "" else grid[r, i_pn],
+      context = context, source = paste0("sheet=", sheet, "; row=", r))
+  }
+  list(sheet = sheet, relative_path = relative_path, parameters = parameters)
+}
+
+# CODELIST sheet：以「名称行(仅首列)+表头行(值|解码)+若干值行」为一个 block，空行分隔。
+runtime_spec_parse_codelists <- function(grid, relative_path) {
+  if (!nrow(grid)) return(list())
+  out <- list(); r <- 1L; n <- nrow(grid)
+  while (r <= n) {
+    name <- grid[r, 1]
+    if (!nzchar(name) || (ncol(grid) >= 2L && nzchar(grid[r, 2]))) { r <- r + 1L; next }
+    header_row <- r + 1L
+    if (header_row > n || !nzchar(grid[header_row, 1])) { r <- r + 1L; next }
+    decode_label <- if (ncol(grid) >= 2L) grid[header_row, 2] else ""
+    # 值行两列均非空；空行或下一个名称行（首列非空、次列空）结束本 block。
+    values <- list(); vr <- header_row + 1L
+    while (vr <= n && nzchar(grid[vr, 1]) && ncol(grid) >= 2L && nzchar(grid[vr, 2])) {
+      values[[length(values) + 1L]] <- list(value = grid[vr, 1], code = grid[vr, 2], source = paste0("sheet=CODELIST; row=", vr))
+      vr <- vr + 1L
+    }
+    out[[length(out) + 1L]] <- list(name = name, decode_label = decode_label, values = values, source = paste0("sheet=CODELIST; row=", header_row))
+    r <- vr
+  }
+  out
+}
+
+# 完整 typed projection：跨所有已登记 workbook 汇总 dataset / PARAM / codelist。
+runtime_spec_projection <- function(study_dir, project_dir) {
+  workbooks <- runtime_spec_workbook_paths(study_dir, project_dir)
+  empty <- list(has_specification = FALSE, source_files = character(), datasets = list(), parameters = list(), codelists = list())
+  if (!nrow(workbooks)) return(empty)
+  datasets <- list(); parameters <- list(); codelists <- list()
+  for (i in seq_len(nrow(workbooks))) {
+    relative_path <- workbooks$relative_path[[i]]
+    grids <- runtime_spec_read_grids(workbooks$path[[i]])
+    for (sheet in names(grids)) {
+      grid <- grids[[sheet]]
+      if (runtime_spec_is_dataset_sheet(sheet)) datasets[[length(datasets) + 1L]] <- runtime_spec_parse_dataset_sheet(sheet, grid, relative_path)
+      else if (runtime_spec_is_param_sheet(sheet)) parameters[[length(parameters) + 1L]] <- runtime_spec_parse_param_sheet(sheet, grid, relative_path)
+      else if (runtime_spec_is_codelist_sheet(sheet)) codelists <- c(codelists, runtime_spec_parse_codelists(grid, relative_path))
+    }
+  }
+  datasets <- datasets[order(vapply(datasets, function(x) toupper(x$dataset), character(1)), method = "radix")]
+  list(has_specification = TRUE, source_files = workbooks$relative_path, datasets = datasets, parameters = parameters, codelists = codelists)
+}
+
+# ---- spec 与 runtime profile 变量级对齐 -----------------------------------
+runtime_spec_type_class <- function(spec_type) { u <- toupper(trimws(spec_type)); if (u %in% c("CHAR", "CHARACTER", "TEXT", "STRING")) "character" else if (u %in% c("NUM", "NUMERIC", "INTEGER", "FLOAT", "DOUBLE")) "numeric" else NA_character_ }
+runtime_spec_runtime_class <- function(cls) { if (cls %in% c("character", "factor")) "character" else if (cls %in% c("numeric", "integer", "double")) "numeric" else NA_character_ }
+
+# 对每个 spec/runtime 都有的 dataset，按变量名给出 matched/runtime-only/spec-only/type-mismatch。
+runtime_spec_runtime_alignment <- function(profile_datasets, spec) {
+  if (!isTRUE(spec$has_specification)) return(list(datasets = list(), datasets_runtime_only = character(), datasets_spec_only = character()))
+  runtime_by_name <- setNames(profile_datasets, vapply(profile_datasets, function(x) toupper(as.character(x$dataset)), character(1)))
+  spec_by_name <- setNames(spec$datasets, vapply(spec$datasets, function(x) toupper(x$dataset), character(1)))
+  common <- intersect(names(runtime_by_name), names(spec_by_name))
+  aligned <- lapply(sort(common), function(key) {
+    rt <- runtime_by_name[[key]]; sp <- spec_by_name[[key]]
+    rt_vars <- vapply(rt$variables, function(v) toupper(as.character(v$name)), character(1))
+    rt_class <- setNames(vapply(rt$variables, function(v) as.character(v$class), character(1)), rt_vars)
+    sp_vars <- vapply(sp$variables, function(v) toupper(v$variable), character(1))
+    sp_type <- setNames(vapply(sp$variables, function(v) as.character(v$type), character(1)), sp_vars)
+    matched <- intersect(rt_vars, sp_vars)
+    type_mismatch <- list()
+    for (v in matched) {
+      sc <- runtime_spec_type_class(sp_type[[v]]); rc <- runtime_spec_runtime_class(rt_class[[v]])
+      if (!is.na(sc) && !is.na(rc) && sc != rc) type_mismatch[[length(type_mismatch) + 1L]] <- list(variable = v, spec_type = sp_type[[v]], runtime_class = rt_class[[v]])
+    }
+    list(dataset = sp$dataset, matched = sort(matched), runtime_only = sort(setdiff(rt_vars, sp_vars)), spec_only = sort(setdiff(sp_vars, rt_vars)), type_mismatch = type_mismatch)
+  })
+  list(datasets = aligned,
+       datasets_runtime_only = sort(setdiff(names(runtime_by_name), names(spec_by_name))),
+       datasets_spec_only = sort(setdiff(names(spec_by_name), names(runtime_by_name))))
 }

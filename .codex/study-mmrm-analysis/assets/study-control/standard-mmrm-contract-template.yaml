@@ -1,7 +1,12 @@
+contract_schema_version: "2.1"
 profile_version: standard-mmrm-profile/v1
 study:
   study_id: STUDY-ID
 execution:
+  data_availability: available
+  data_classification: production
+  intended_use: formal_analysis
+  sas_execution_profile: sas-9.4m5-self-contained/v1
   fail_fast: false
 approval:
   review_file: studies/STUDY-ID/statistician-review/statistical-review.md
@@ -17,6 +22,7 @@ analyses:
     tfl_id: TFL-001
     title: Endpoint change from baseline by visit
     dataset:
+      binding_mode: linked
       file: analysis.csv
       format: csv
       relative_path: studies/STUDY-ID/input/analysis.csv
@@ -47,6 +53,7 @@ analyses:
           subscale: {variable: not_applicable, values: []}
         row_allocation_rule: one_row_per_subject_endpoint_visit
     fixed_effects: [visit, baseline, baseline_by_visit]
+    reml: true
     covariance:
       primary: UN
       fallback: [AR1, CS]
@@ -56,5 +63,11 @@ analyses:
       treatment_visit_lsmeans: false
       pairwise_differences: false
     output:
-      raw_file: MMRM-01_raw.csv
-      final_file: MMRM-01_final.csv
+      r_raw_file: TFL-001_r_raw.csv
+      r_final_file: TFL-001_r_final.csv
+      r_diagnostic_file: TFL-001_r_diagnostic.csv
+      r_run_record_file: TFL-001_r_run_record.csv
+      sas_raw_file: TFL-001_sas_raw.csv
+      sas_final_file: TFL-001_sas_final.csv
+      sas_diagnostic_file: TFL-001_sas_diagnostic.csv
+      sas_run_record_file: TFL-001_sas_run_record.csv
