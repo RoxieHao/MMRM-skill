@@ -12,11 +12,15 @@ Compile 阶段**只能读取当前 `statistician-review/statistical-review.md`**
 
 ## 决定优先级
 
+统计师使用自然语言确认统计决定，不负责书写 `selected_codes`、`predicates`、`model_terms` 或其它 YAML/schema key。Compile 的职责是把语义唯一的自然语言决定确定性投影为完整 typed plan。这里的“完整”指统计范围、分组和规则没有歧义，**不要求统计师评论包含 typed 字段名**。
+
 对每个 (TFL, 规则类别) 单元，按以下优先级解释统计师意见：
 
-1. **明确修订**：统计师写出的明确取值/规则，覆盖 AI 候选。
-2. **采用**：统计师认可 AI 候选。只有该候选唯一、完整、可执行（含全部所需 typed 字段）时才能采用；若候选为“未识别/当前不可执行/多候选未选择”或缺 typed 字段，则该单元保持 unresolved，不得编译出值。
+1. **明确修订**：统计师写出的明确取值/规则，覆盖 AI 候选。自然语言只要足以唯一生成全部必需 typed 字段，即可编译。
+2. **采用**：统计师认可 AI 候选。只有候选的统计语义唯一、完整、可执行，且足以由 AI 生成全部必需 typed 字段时才能采用；若候选为“未识别/当前不可执行/多候选未选择”或统计含义仍有歧义，则该单元保持 unresolved。
 3. **同上表**：向前查找最近一个已解析 TFL 的同一规则类别并继承其决定；继承后在当前 analysis 内**展开为完整取值**，不保留引用。没有可继承的前序同类别决定时保持 unresolved。
+
+不得仅因统计师没有手写 schema key 而生成 issue。例如，“`OVERPW` 与 `OVERTPW` 分别作为独立 endpoint group”唯一确定两个 singleton group，Compile 应生成各自的 `selected_codes`；未提及的 `PTOTW` 按“不适用”处理。相反，“采用 `OVERPW`、`OVERTPW`”若无法判断分别分析还是合并分析，才是统计语义未决。
 
 ## 输出契约
 
@@ -29,7 +33,13 @@ Compile 阶段**只能读取当前 `statistician-review/statistical-review.md`**
 - 把 `SRC-*`（源证据 ID）与派生的决定 ID（`<TFL ID>/<规则类别>`）映射进 closed 的 `trace` map；
 - 未决定的必填值保留 YAML `null`；
 - 明确为空的集合保留 `[]`；
-- **绝不为了让校验通过而插入 profile default 或猜测值。**
+- **绝不为了让校验通过而插入 profile default 或猜测值；唯一例外是下述 Standard MMRM Profile v1 的固定 REML 规则。**
+
+### REML 唯一结构性默认
+
+Standard MMRM Profile v1 固定使用 REML。若统计师没有在 Section 3 提及估计方法，Compile 必须确定性写入 `reml: true`，并使用该 analysis 的模型或“协方差与自由度”决定 ID 填充 `trace.reml`；不得因评论中没有“REML”字样生成 issue。若统计师明确要求非 REML，则当前 profile 无法表达，必须生成 issue，不能静默改回 REML。
+
+这是禁止 profile defaults 规则的唯一例外。不得由此补填任何 study-specific 协变量、协方差结构、fallback、自由度方法、estimand、endpoint、筛选或其它统计决定。
 
 每个 analysis 必须完整且自包含。不要创建 study 级 defaults、继承、override、任意表达式、join 或未批准操作。内建 derivation 只有 typed `recode`；复杂转换需要 SHA-pinned 的已批准 adapter。
 

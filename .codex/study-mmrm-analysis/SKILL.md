@@ -48,13 +48,15 @@ output/analyses/<safe_analysis_id>/ + output/tfl-output-manifest.csv
 
 ## 审阅闭环、issue 归属与状态
 
-- **唯一事实来源：** 统计师只编辑第 3 节每个 (TFL, 规则类别) 单元的“统计师审阅意见”。第 7 节未解决问题由 AI 每轮从第 3 节完全重建，统计师不手动编辑 issue，不手写 resolution/status。
-- **issue 派生：** 仍不可唯一执行的单元各生成一条稳定 ID `REVIEW/<TFL ID>/<规则类别>`；可执行单元不产生 issue；全部可执行时第 7 节为空表。第 7 节是当前快照，不保留历史行。
-- **“采用”即最终范围：** “采用”只取候选中能直接成为最终规则的内容；候选里未被统计师明确保留的附加限制/维度/窗口/筛选视为不适用，不产生 issue。只有明确需求无法由 schema/renderer 表达、必需决策无来源、或采用的数据集无法在 manifest 中唯一解析时才建 issue。
-- **模型固定效应（schema 2.2）：** 用结构化 `model_terms` 表达，核心项用 `role`（visit/baseline/treatment），额外协变量用 `variable`+`variable_type`（categorical/numeric），交互用 `of` 引用已声明成员；不允许自由文本公式，不含 study 默认变量。dataset binding 从既有 manifest 解析，review 不手写 path/SHA。详见 `references/analysis-plan-compilation.md`。
+- **唯一事实来源：** 统计师只编辑第 3 节每个 (TFL, 规则类别) 单元的“统计师审阅意见”。统计师使用自然语言表达统计决定，不手写 `selected_codes`、`predicates`、`model_terms` 或其它 YAML/schema key；AI 负责把语义唯一的决定投影为完整 typed plan。第 7 节未解决问题由 AI 每轮从第 3 节完全重建，统计师不手动编辑 issue，不手写 resolution/status。
+- **语义完整不等于手写 schema：** 判断标准是统计师意见能否唯一确定统计范围、分组和规则，而不是评论中是否出现 typed 字段名。自然语言一旦足以唯一生成全部必需 typed 字段，即视为可执行；不得仅因未手写 YAML key 建 issue。例如“`OVERPW` 与 `OVERTPW` 分别作为独立 endpoint group”应由 AI 编译为两个 singleton `selected_codes`，未提及的 `PTOTW` 视为不适用。
+- **issue 派生：** 仍不可唯一执行的单元各生成一条稳定 ID `REVIEW/<TFL ID>/<规则类别>`；可执行单元不产生 issue；全部可执行时第 7 节为空表。第 7 节是当前快照，不保留历史行。只有自然语言本身无法唯一确定统计决定时才建 issue，例如“采用 A、B”无法判断二者分别分析还是合并分析。
+- **“采用”即最终范围：** “采用”只取候选中能直接成为最终规则的内容；候选里未被统计师明确保留的附加候选、限制、维度、窗口或筛选视为不适用，不产生 issue。只有明确需求无法由 schema/renderer 表达、必需决策无来源、或采用的数据集无法在 manifest 中唯一解析时才建 issue。
+- **REML 是唯一结构性默认：** Standard MMRM Profile v1 固定使用 REML。统计师未在 Section 3 提及估计方法时，AI 必须编译为 `reml: true`，并把对应模型/协方差决定 ID 写入 trace；不得为“未写 REML”生成 issue。若统计师明确要求非 REML，因当前 profile 不支持而生成 issue，不得静默覆盖。此规则是“不得从 profile defaults 补值”的唯一例外，不允许推广到协变量、协方差、自由度、estimand 或其它 study-specific 决定。
+- **模型固定效应（schema 2.2）：** 用结构化 `model_terms` 表达，核心项用 `role`（visit/baseline/treatment），额外协变量用 `variable`+`variable_type`（categorical/numeric），交互用 `of` 引用已声明成员；这些 typed 字段由 AI 根据统计师的自然语言决定生成，不要求统计师手写。不得使用未决定的 study 默认变量。dataset binding 从既有 manifest 解析，review 不手写 path/SHA。详见 `references/analysis-plan-compilation.md`。
 - **复检循环（用户说“已审阅/继续/复检”等时触发，纯 agent step，只读 review + 现有 R 校验）：**
   1. 读当前 `statistician-review/statistical-review.md`。
-  2. 按优先级解释每个单元：明确修订 > 采用（候选唯一、完整、含全部 typed 字段）> 同上表（向前继承并展开为完整取值）。
+  2. 按优先级解释每个单元：明确修订 > 采用（候选语义唯一、完整，足以由 AI 生成全部必需 typed 字段）> 同上表（向前继承并展开为完整取值）。
   3. 完全重建第 7 节。
   4. 仍有未解决单元：不写 candidate；保持 `review_status=pending`、`finalization_status=pending`；删除陈旧 `analysis-plan.candidate.yaml` 与残留 approval hashes；告知统计师需改哪些单元。
   5. 全部可执行：写 `analysis-plan.candidate.yaml`；置 `review_status=ready_for_compilation`、`finalization_status=pending`；运行 `scripts/finalize_statistical_review.R --study-dir=<study> --reviewer=<identity>`。
